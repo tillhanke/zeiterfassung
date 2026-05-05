@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% set MONATE = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'] %}
+{% set WTAGE = ['Mo','Di','Mi','Do','Fr','Sa','So'] %}
+{% block title %}{{ user.name }} – {{ MONATE[month-1] }} {{ year }}{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">{{ user.name }}</h1>
+    <small class="text-muted">{{ user.weekly_hours }} h/Woche · Soll/Tag {{ '%.2f'|format(user.daily_target) }} h</small>
+  </div>
+  <a class="btn btn-primary" href="{{ url_for('entry_form', user_id=user.id, date=today.isoformat()) }}">
+    + Tag eintragen
+  </a>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <a class="btn btn-outline-secondary btn-sm"
+     href="{{ url_for('user_dashboard', user_id=user.id, year=prev_year, month=prev_month) }}">
+    « {{ MONATE[prev_month-1] }} {{ prev_year }}
+  </a>
+  <h2 class="h5 mb-0">{{ MONATE[month-1] }} {{ year }}</h2>
+  <a class="btn btn-outline-secondary btn-sm"
+     href="{{ url_for('user_dashboard', user_id=user.id, year=next_year, month=next_month) }}">
+    {{ MONATE[next_month-1] }} {{ next_year }} »
+  </a>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="text-muted small">Soll</div>
+        <div class="fs-4">{{ '%.2f'|format(summary.target_hours) }} h</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="text-muted small">Ist</div>
+        <div class="fs-4">{{ '%.2f'|format(summary.actual_hours) }} h</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="text-muted small">Saldo</div>
+        <div class="fs-4 {{ 'month-saldo-positive' if summary.saldo >= 0 else 'month-saldo-negative' }}">
+          {{ '%+.2f'|format(summary.saldo) }} h
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="text-muted small">Urlaub / Krank</div>
+        <div class="fs-4">{{ summary.vacation_days }} / {{ summary.sick_days }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4 year-summary">
+  <div class="card-body py-3">
+    <div class="d-flex flex-wrap align-items-center gap-3">
+      <div class="me-auto">
+        <div class="text-muted small">Jahresgesamt {{ year_summary.year }}</div>
+      </div>
+      <div>
+        <span class="text-muted small">Soll </span>
+        <strong>{{ '%.2f'|format(year_summary.target_hours) }} h</strong>
+      </div>
+      <div>
+        <span class="text-muted small">Ist </span>
+        <strong>{{ '%.2f'|format(year_summary.actual_hours) }} h</strong>
+      </div>
+      <div>
+        <span class="text-muted small">Saldo </span>
+        <strong class="{{ 'month-saldo-positive' if year_summary.saldo >= 0 else 'month-saldo-negative' }}">
+          {{ '%+.2f'|format(year_summary.saldo) }} h
+        </strong>
+      </div>
+      <div>
+        <span class="text-muted small">Urlaub / Krank </span>
+        <strong>{{ year_summary.vacation_days }} / {{ year_summary.sick_days }}</strong>
+      </div>
+      <div>
+        <span class="text-muted small">Arbeitstage </span>
+        <strong>{{ year_summary.worked_days }}</strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Datum</th>
+          <th>Tag</th>
+          <th>Typ</th>
+          <th class="text-end">Brutto</th>
+          <th class="text-end">Netto</th>
+          <th class="text-end">Soll</th>
+          <th class="text-end">Diff</th>
+          <th>Notiz</th>
+          <th class="text-end">Aktion</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in summary.days %}
+          <tr class="day-row {{ d.kind }}{% if d.date == today %} today{% endif %}"
+              {% if d.date == today %}id="today-row"{% endif %}>
+            <td>
+              {{ d.date.isoformat() }}
+              {% if d.date == today %}
+                <span class="badge bg-dark ms-1">heute</span>
+              {% endif %}
+            </td>
+            <td>{{ WTAGE[d.weekday] }}</td>
+            <td>
+              {% if d.kind == 'work' %}<span class="badge bg-primary">Arbeit</span>
+              {% elif d.kind == 'vacation' %}<span class="badge bg-warning text-dark">Urlaub</span>
+              {% elif d.kind == 'sick' %}<span class="badge bg-danger">Krank</span>
+              {% elif d.kind == 'holiday' %}<span class="badge bg-info text-dark">Feiertag</span>
+              {% elif d.kind == 'weekend' %}<span class="text-muted">Wochenende</span>
+              {% else %}<span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              {% if d.kind == 'work' %}{{ '%.2f'|format(d.gross) }}{% else %}–{% endif %}
+            </td>
+            <td class="text-end">
+              {% if d.kind in ('work','vacation','sick') %}{{ '%.2f'|format(d.net) }}{% else %}–{% endif %}
+            </td>
+            <td class="text-end">{{ '%.2f'|format(d.target) }}</td>
+            <td class="text-end">
+              {% if d.target > 0 or d.kind == 'work' %}
+                <span class="{{ 'month-saldo-positive' if d.diff >= 0 else 'month-saldo-negative' }}">
+                  {{ '%+.2f'|format(d.diff) }}
+                </span>
+              {% else %}–{% endif %}
+            </td>
+            <td><small class="text-muted">{{ d.note }}</small></td>
+            <td class="text-end">
+              {% if d.kind not in ('weekend', 'holiday') %}
+                <a class="btn btn-sm btn-outline-primary"
+                   href="{{ url_for('entry_form', user_id=user.id, date=d.date.isoformat()) }}">
+                  Eintragen
+                </a>
+              {% endif %}
+              {% if d.kind in ('work','vacation','sick') %}
+                <form method="post"
+                      action="{{ url_for('delete_day', user_id=user.id, iso_date=d.date.isoformat()) }}"
+                      class="d-inline"
+                      onsubmit="return confirm('Eintrag wirklich löschen?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">×</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const row = document.getElementById('today-row');
+    if (row) row.scrollIntoView({ block: 'center', behavior: 'instant' });
+  })();
+</script>
+{% endblock %}
