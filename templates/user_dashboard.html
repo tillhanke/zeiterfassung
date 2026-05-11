@@ -108,9 +108,8 @@
           <th>Datum</th>
           <th>Tag</th>
           <th>Typ</th>
-          <th class="text-end">Brutto</th>
-          <th class="text-end">Netto</th>
-          <th class="text-end">Soll</th>
+          <th class="text-end">Start</th>
+          <th class="text-end">Ende</th>
           <th class="text-end">Diff</th>
           <th>Notiz</th>
           <th class="text-end">Aktion</th>
@@ -138,12 +137,11 @@
               {% endif %}
             </td>
             <td class="text-end">
-              {% if d.kind == 'work' %}{{ '%.2f'|format(d.gross) }}{% else %}–{% endif %}
+              {% if d.kind == 'work' and d.start %}{{ d.start.strftime('%H:%M') }}{% else %}–{% endif %}
             </td>
             <td class="text-end">
-              {% if d.kind in ('work','vacation','sick') %}{{ '%.2f'|format(d.net) }}{% else %}–{% endif %}
+              {% if d.kind == 'work' and d.end %}{{ d.end.strftime('%H:%M') }}{% else %}–{% endif %}
             </td>
-            <td class="text-end">{{ '%.2f'|format(d.target) }}</td>
             <td class="text-end">
               {% if (d.target > 0 or d.kind == 'work') and d.kind != 'future' %}
                 <span class="{{ 'month-saldo-positive' if d.diff >= 0 else 'month-saldo-negative' }}">

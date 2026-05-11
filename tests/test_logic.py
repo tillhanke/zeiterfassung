@@ -302,6 +302,24 @@ class TestBuildMonthSummary:
         # net 8h - target 8h = 0
         assert wday.diff == pytest.approx(0.0)
 
+    def test_workday_has_start_and_end_times(self):
+        wds = [_wd(date(2026, 5, 11), time(8, 15), time(16, 45))]
+        sm = build_month_summary(_user(), 2026, 5, wds, [], today=date(2026, 5, 11))
+        by_date = {d.date: d for d in sm.days}
+        wday = by_date[date(2026, 5, 11)]
+        assert wday.start == time(8, 15)
+        assert wday.end == time(16, 45)
+
+    def test_non_work_days_have_no_start_end(self):
+        absences = [_abs(date(2026, 5, 11), "vacation")]
+        sm = build_month_summary(_user(), 2026, 5, [], absences, today=date(2026, 5, 11))
+        by_date = {d.date: d for d in sm.days}
+        # Urlaubs-, Feiertags-, Wochenend- und leere Tage haben keine Start/Endzeit.
+        assert by_date[date(2026, 5, 11)].start is None  # vacation
+        assert by_date[date(2026, 5, 11)].end is None
+        assert by_date[date(2026, 5, 1)].start is None   # holiday
+        assert by_date[date(2026, 5, 2)].start is None   # weekend
+
     def test_target_per_day_visible_on_future(self):
         """Future-Tage zeigen Soll-Wert (informativ), tragen aber nicht ins target_total bei."""
         sm = build_month_summary(_user(), 2026, 5, [], [], today=date(2026, 5, 11))

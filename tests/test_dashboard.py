@@ -51,6 +51,23 @@ class TestDashboardContent:
         assert b"2026-05-11" in r.data
         assert b"Arbeit" in r.data
 
+    def test_workday_start_and_end_time_shown(self, client, login_alice, make_workday):
+        make_workday(login_alice, date(2026, 5, 11), time(8, 15), time(16, 45))
+        r = client.get(f"/user/{login_alice}?year=2026&month=5")
+        assert b"08:15" in r.data
+        assert b"16:45" in r.data
+
+    def test_table_no_longer_shows_brutto_netto_soll_columns(self, client, login_alice):
+        r = client.get(f"/user/{login_alice}?year=2026&month=5")
+        # Spaltenüberschriften "Brutto"/"Netto"/"Soll" in der Tagestabelle sind weg.
+        assert b"<th class=\"text-end\">Brutto</th>" not in r.data
+        assert b"<th class=\"text-end\">Netto</th>" not in r.data
+        # Soll-Karte oben enthält "Soll" weiterhin, aber kein <th>Soll</th> mehr.
+        assert b"<th class=\"text-end\">Soll</th>" not in r.data
+        # Stattdessen sind Start und Ende vorhanden.
+        assert b"<th class=\"text-end\">Start</th>" in r.data
+        assert b"<th class=\"text-end\">Ende</th>" in r.data
+
     def test_vacation_badge_present(self, client, login_alice, make_absence):
         make_absence(login_alice, date(2026, 5, 11), kind="vacation")
         r = client.get(f"/user/{login_alice}?year=2026&month=5")

@@ -128,6 +128,8 @@ class DaySummary:
     net: float
     target: float
     note: str = ""
+    start: Optional[time] = None
+    end: Optional[time] = None
 
     @property
     def diff(self) -> float:
@@ -211,7 +213,10 @@ def build_month_summary(
             )
             note = f"{base_note} · Feiertag: {hname}" if is_holi else base_note
             days.append(
-                DaySummary(d, d.weekday(), "work", g, n, target, note)
+                DaySummary(
+                    d, d.weekday(), "work", g, n, target, note,
+                    start=wd.start_time, end=wd.end_time,
+                )
             )
             actual_total += n
             target_total += target
