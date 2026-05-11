@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+
+# Lokale Datenbank (instance/-Folder soll im Repo bleiben, die DB darin nicht)
+instance/*.db
+instance/*.db-journal
+
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/

@@ -9,9 +9,14 @@
     <h1 class="h3 mb-0">{{ user.name }}</h1>
     <small class="text-muted">{{ user.weekly_hours }} h/Woche · Soll/Tag {{ '%.2f'|format(user.daily_target) }} h</small>
   </div>
-  <a class="btn btn-primary" href="{{ url_for('entry_form', user_id=user.id, date=today.isoformat()) }}">
-    + Tag eintragen
-  </a>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-primary" href="{{ url_for('bulk_entry_form', user_id=user.id) }}">
+      + Mehrere Tage
+    </a>
+    <a class="btn btn-primary" href="{{ url_for('entry_form', user_id=user.id, date=today.isoformat()) }}">
+      + Tag eintragen
+    </a>
+  </div>
 </div>
 
 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -128,6 +133,7 @@
               {% elif d.kind == 'sick' %}<span class="badge bg-danger">Krank</span>
               {% elif d.kind == 'holiday' %}<span class="badge bg-info text-dark">Feiertag</span>
               {% elif d.kind == 'weekend' %}<span class="text-muted">Wochenende</span>
+              {% elif d.kind == 'future' %}<span class="text-muted small">noch offen</span>
               {% else %}<span class="text-muted">—</span>
               {% endif %}
             </td>
@@ -139,7 +145,7 @@
             </td>
             <td class="text-end">{{ '%.2f'|format(d.target) }}</td>
             <td class="text-end">
-              {% if d.target > 0 or d.kind == 'work' %}
+              {% if (d.target > 0 or d.kind == 'work') and d.kind != 'future' %}
                 <span class="{{ 'month-saldo-positive' if d.diff >= 0 else 'month-saldo-negative' }}">
                   {{ '%+.2f'|format(d.diff) }}
                 </span>

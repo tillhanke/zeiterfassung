@@ -120,7 +120,10 @@ def is_holiday(d: date) -> bool:
 class DaySummary:
     date: date
     weekday: int  # 0=Mo
-    kind: str  # 'work' | 'vacation' | 'sick' | 'holiday' | 'empty' | 'weekend'
+    # 'work' | 'vacation' | 'sick' | 'holiday' | 'empty' | 'weekend' | 'future'
+    # 'future' = leerer Mo-Fr-Tag in der Zukunft (zählt nicht ins Soll, damit
+    # er keinen künstlichen Minus-Saldo erzeugt).
+    kind: str
     gross: float
     net: float
     target: float
@@ -167,8 +170,18 @@ def build_month_summary(
     month: int,
     workdays: Iterable[WorkDay],
     absences: Iterable[Absence],
+    today: Optional[date] = None,
 ) -> MonthSummary:
-    """Erzeugt eine Monatsübersicht aus den vorhandenen Einträgen."""
+    """Erzeugt eine Monatsübersicht aus den vorhandenen Einträgen.
+
+    `today` bestimmt, bis zu welchem Tag (inkl.) das Soll in die Summen
+    einfließt. Leere Mo-Fr-Tage in der Zukunft (d > today) tragen weder zum
+    Soll noch zum Ist bei, damit zukünftige Tage keinen künstlichen
+    Minus-Saldo erzeugen. Eingetragene Arbeit/Urlaub/Krank an zukünftigen
+    Tagen zählen dagegen normal mit.
+    """
+    if today is None:
+        today = date.today()
     daily_target = user.daily_target
     wd_by_date = {w.date: w for w in workdays}
     abs_by_date = {a.date: a for a in absences}
@@ -183,6 +196,7 @@ def build_month_summary(
         is_weekday = d.weekday() < 5
         hname = holiday_name(d)
         is_holi = hname is not None
+        is_future = d > today
         # An Feiertagen entfallen die Soll-Stunden (auch wenn sie auf einen Mo-Fr fallen).
         target = daily_target if (is_weekday and not is_holi) else 0.0
 
@@ -200,10 +214,12 @@ def build_month_summary(
                 DaySummary(d, d.weekday(), "work", g, n, target, note)
             )
             actual_total += n
+            target_total += target
         elif is_holi:
             days.append(
                 DaySummary(d, d.weekday(), "holiday", 0.0, 0.0, target, hname)
             )
+            # target == 0
         elif d in abs_by_date:
             a = abs_by_date[d]
             kind = "vacation" if a.kind == Absence.KIND_VACATION else "sick"
@@ -212,13 +228,19 @@ def build_month_summary(
                 DaySummary(d, d.weekday(), kind, 0.0, target, target, note)
             )
             actual_total += target
+            target_total += target
+        elif is_future and is_weekday:
+            days.append(
+                DaySummary(d, d.weekday(), "future", 0.0, 0.0, target, "noch offen")
+            )
+            # Bewusst kein target_total += target: zukünftige leere Werktage
+            # erzeugen kein Minus im Saldo.
         else:
             kind = "weekend" if not is_weekday else "empty"
             days.append(
                 DaySummary(d, d.weekday(), kind, 0.0, 0.0, target, "")
             )
-
-        target_total += target
+            target_total += target
 
     return MonthSummary(
         user=user,
@@ -261,15 +283,19 @@ def build_year_summary(
     year: int,
     workdays: Iterable[WorkDay],
     absences: Iterable[Absence],
+    today: Optional[date] = None,
 ) -> YearSummary:
     """Aggregiert Soll/Ist/Saldo sowie Urlaubs- und Krankentage über das gesamte Jahr.
 
-    Logik identisch zu build_month_summary, aber ohne Tagesliste:
+    Logik identisch zu build_month_summary:
     - Mo-Fr ohne Feiertag: target = daily_target
     - Wochenende oder Feiertag: target = 0
     - Arbeitstag: actual += net_hours(gross)
     - Urlaub/Krank: actual += target (zählt als erfüllt)
+    - Leerer Mo-Fr-Tag in der Zukunft (d > today): zählt nicht ins Soll.
     """
+    if today is None:
+        today = date.today()
     daily_target = user.daily_target
     wd_by_date = {w.date: w for w in workdays}
     abs_by_date = {a.date: a for a in absences}
@@ -286,22 +312,28 @@ def build_year_summary(
     while d < end_exclusive:
         is_weekday = d.weekday() < 5
         is_holi = is_holiday(d)
+        is_future = d > today
         target = daily_target if (is_weekday and not is_holi) else 0.0
-        target_total += target
 
         if d in wd_by_date:
             wd = wd_by_date[d]
             actual_total += net_hours(gross_hours(wd.start_time, wd.end_time))
+            target_total += target
             worked += 1
         elif is_holi:
-            pass  # Feiertag: kein Soll, kein zusätzlicher Ist-Beitrag
+            pass  # target == 0
         elif d in abs_by_date:
             a = abs_by_date[d]
             actual_total += target
+            target_total += target
             if a.kind == Absence.KIND_VACATION:
                 vacation += 1
             else:
                 sick += 1
+        elif is_future and is_weekday:
+            pass  # leerer Werktag in der Zukunft: kein Soll-Beitrag
+        else:
+            target_total += target
 
         d += one_day
 
@@ -341,3 +373,42 @@ assert holiday_name(date(2026, 12, 25)) == "1. Weihnachtstag"
 assert is_holiday(date(2026, 5, 1)) is True
 assert is_holiday(date(2026, 1, 6)) is True
 assert is_holiday(date(2026, 5, 4)) is False
+
+
+# --- Saldo-Stichtag-Logik: zukünftige leere Werktage zählen nicht ins Soll. ---
+class _FakeUser:
+    weekly_hours = 40.0
+    daily_target = 8.0
+
+
+_u = _FakeUser()
+# Mai 2026: Mo 11.5. als heutiger Stichtag. Mi 13.5. ist leer und in der Zukunft.
+_sm = build_month_summary(_u, 2026, 5, [], [], today=date(2026, 5, 11))
+_by_date = {d.date: d for d in _sm.days}
+assert _by_date[date(2026, 5, 13)].kind == "future"
+assert _by_date[date(2026, 5, 12)].kind == "future"  # Di in der Zukunft
+assert _by_date[date(2026, 5, 11)].kind == "empty"   # heute, leer -> Minus zählt
+assert _by_date[date(2026, 5, 8)].kind == "empty"    # Fr letzte Woche, leer
+assert _by_date[date(2026, 5, 14)].kind == "holiday"  # Christi Himmelfahrt
+# target_total: Mo-Fr <= 11.5. ohne Feiertag = 1.5., 4.5., 5.5., 6.5., 7.5., 8.5., 11.5.
+# (1.5. ist Tag der Arbeit -> Feiertag, daher target=0)
+# also 6 Werktage * 8h = 48h
+assert _sm.target_hours == 48.0, _sm.target_hours
+assert _sm.actual_hours == 0.0
+assert _sm.saldo == -48.0
+# Zukünftige Tage haben Soll-Anzeige (für die Zelle), aber kein target_total-Beitrag.
+assert _by_date[date(2026, 5, 13)].target == 8.0
+# Wenn aber bereits ein Workday in der Zukunft eingetragen ist, zählt er normal.
+from types import SimpleNamespace as _NS
+_future_wd = _NS(date=date(2026, 5, 13), start_time=time(9, 0), end_time=time(17, 30))
+_sm2 = build_month_summary(_u, 2026, 5, [_future_wd], [], today=date(2026, 5, 11))
+_d13 = next(d for d in _sm2.days if d.date == date(2026, 5, 13))
+assert _d13.kind == "work"
+assert _sm2.target_hours == 48.0 + 8.0  # +13.5.
+assert abs(_sm2.actual_hours - 8.0) < 1e-9
+# Jahresübersicht: zukünftige leere Werktage tragen nicht zum Soll bei.
+_sy = build_year_summary(_u, 2026, [], [], today=date(2026, 5, 11))
+_sy_full = build_year_summary(_u, 2026, [], [], today=date(2026, 12, 31))
+assert _sy.target_hours < _sy_full.target_hours
+# Mai-Anteil im Jahressoll muss zu den oben berechneten 48h passen.
+assert _sy.target_hours > 48.0 - 1e-9

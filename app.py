@@ -7,10 +7,14 @@ Startbefehle:
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+import json
+import os
+import re
+from datetime import date, datetime, timedelta
 from functools import wraps
 from typing import Optional
 
+import click
 from flask import (
     Flask,
     abort,
@@ -28,18 +32,20 @@ from models import Absence, User, WorkDay, db
 
 def create_app() -> Flask:
     app = Flask(__name__)
+    # SECRET_KEY MUSS in Produktion über die Umgebungsvariable gesetzt werden.
+    # Der Dev-Fallback ist absichtlich unsicher und wird nur akzeptiert, wenn
+    # FLASK_ENV/SECRET_KEY nicht gesetzt sind – siehe Warnung bei Produktion.
     app.config.update(
-        SECRET_KEY="dev-secret-key-change-me",
+        SECRET_KEY=os.environ.get("SECRET_KEY") or "dev-secret-key-change-me",
         SQLALCHEMY_DATABASE_URI="sqlite:///zeiterf.db",
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
     )
 
-    # SQLite in instance-Folder ablegen, damit es bei flask run automatisch entsteht.
+    # SQLite im instance-Folder ablegen, damit es bei `flask run` automatisch
+    # entsteht. In Docker wird das Verzeichnis als Volume gemountet.
     app.config["SQLALCHEMY_DATABASE_URI"] = (
         f"sqlite:///{app.instance_path}/zeiterf.db"
     )
-    import os
-
     os.makedirs(app.instance_path, exist_ok=True)
 
     db.init_app(app)
@@ -327,6 +333,138 @@ def register_routes(app: Flask) -> None:
 
         return render_template("entry_form.html", user=user, prefill_date=prefill_date)
 
+    @app.route("/user/<int:user_id>/bulk-entry", methods=["GET", "POST"])
+    def bulk_entry_form(user_id: int):
+        user = _ensure_self(user_id)
+
+        # Feiertage der aktuell relevanten Jahre vorbereiten (Anzeige im Formular).
+        today = date.today()
+        years = {today.year, today.year - 1, today.year + 1}
+        holidays_map: dict[str, str] = {}
+        for y in years:
+            for d, name in logic.holidays_sachsen_anhalt(y).items():
+                holidays_map[d.isoformat()] = name
+
+        if request.method == "POST":
+            kind = request.form.get("kind", "work")
+            dates_raw = request.form.get("dates", "")
+
+            tokens = [s for s in re.split(r"[,\s;]+", dates_raw) if s]
+            parsed_dates: list[date] = []
+            for s in tokens:
+                try:
+                    parsed_dates.append(datetime.strptime(s, "%Y-%m-%d").date())
+                except ValueError:
+                    flash(f"Ungültiges Datum: {s}", "danger")
+                    return render_template(
+                        "bulk_entry_form.html",
+                        user=user,
+                        holidays_json=json.dumps(holidays_map),
+                    )
+
+            unique_dates = sorted(set(parsed_dates))
+            if not unique_dates:
+                flash("Bitte mindestens ein Datum auswählen.", "danger")
+                return render_template(
+                    "bulk_entry_form.html",
+                    user=user,
+                    holidays_json=json.dumps(holidays_map),
+                )
+
+            if kind == "work":
+                start_str = request.form.get("start_time", "").strip()
+                end_str = request.form.get("end_time", "").strip()
+                try:
+                    start_t = datetime.strptime(start_str, "%H:%M").time()
+                    end_t = datetime.strptime(end_str, "%H:%M").time()
+                except ValueError:
+                    flash("Bitte gültige Start- und Endzeit angeben.", "danger")
+                    return render_template(
+                        "bulk_entry_form.html",
+                        user=user,
+                        holidays_json=json.dumps(holidays_map),
+                    )
+                if end_t <= start_t:
+                    flash("Endzeit muss nach Startzeit liegen.", "danger")
+                    return render_template(
+                        "bulk_entry_form.html",
+                        user=user,
+                        holidays_json=json.dumps(holidays_map),
+                    )
+
+                for d in unique_dates:
+                    existing_abs = Absence.query.filter_by(
+                        user_id=user.id, date=d
+                    ).first()
+                    if existing_abs:
+                        db.session.delete(existing_abs)
+                    existing_wd = WorkDay.query.filter_by(
+                        user_id=user.id, date=d
+                    ).first()
+                    if existing_wd:
+                        existing_wd.start_time = start_t
+                        existing_wd.end_time = end_t
+                    else:
+                        db.session.add(
+                            WorkDay(
+                                user_id=user.id,
+                                date=d,
+                                start_time=start_t,
+                                end_time=end_t,
+                            )
+                        )
+                db.session.commit()
+                flash(
+                    f"Arbeitszeit für {len(unique_dates)} Tag(e) gespeichert.",
+                    "success",
+                )
+
+            elif kind in (Absence.KIND_VACATION, Absence.KIND_SICK):
+                for d in unique_dates:
+                    existing_wd = WorkDay.query.filter_by(
+                        user_id=user.id, date=d
+                    ).first()
+                    if existing_wd:
+                        db.session.delete(existing_wd)
+                    existing_abs = Absence.query.filter_by(
+                        user_id=user.id, date=d
+                    ).first()
+                    if existing_abs:
+                        existing_abs.kind = kind
+                    else:
+                        db.session.add(
+                            Absence(user_id=user.id, date=d, kind=kind)
+                        )
+                db.session.commit()
+                label = "Urlaub" if kind == Absence.KIND_VACATION else "Krankheit"
+                flash(
+                    f"{label} für {len(unique_dates)} Tag(e) gespeichert.",
+                    "success",
+                )
+            else:
+                flash("Unbekannter Eintragstyp.", "danger")
+                return render_template(
+                    "bulk_entry_form.html",
+                    user=user,
+                    holidays_json=json.dumps(holidays_map),
+                )
+
+            first = unique_dates[0]
+            return redirect(
+                url_for(
+                    "user_dashboard",
+                    user_id=user.id,
+                    year=first.year,
+                    month=first.month,
+                )
+            )
+
+        return render_template(
+            "bulk_entry_form.html",
+            user=user,
+            holidays_json=json.dumps(holidays_map),
+        )
+
     @app.post("/user/<int:user_id>/day/<iso_date>/delete")
     def delete_day(user_id: int, iso_date: str):
         user = _ensure_self(user_id)
@@ -423,6 +561,44 @@ def register_routes(app: Flask) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Wartung: Namen anonymisieren
+# ---------------------------------------------------------------------------
+
+
+def anonymize_user_names(prefix: str = "Nutzerin") -> int:
+    """Anonymisiert die Namen aller Nutzerinnen in der DB.
+
+    Jeder User-Name wird durch ``f"{prefix} {n}"`` ersetzt (n = 1, 2, ...),
+    geordnet nach ``User.id`` für eine stabile, reproduzierbare Zuordnung.
+
+    Es werden ausschließlich die Namen verändert. ``weekly_hours``, ``active``,
+    IDs und sämtliche ``WorkDay``- bzw. ``Absence``-Einträge bleiben unberührt –
+    diese referenzieren ohnehin nur ``user_id`` und sind damit von der
+    Umbenennung nicht betroffen.
+
+    Da ``User.name`` ein UNIQUE-Constraint hat, läuft die Umbenennung in zwei
+    Phasen: zuerst werden alle Namen auf eindeutige Temporärwerte gesetzt und
+    geflusht, anschließend wird der finale Name vergeben. So treten keine
+    Constraint-Kollisionen auf, selbst wenn Zielnamen bereits vergeben sind.
+
+    Aufruf muss innerhalb eines Flask-App-Kontextes erfolgen.
+
+    :param prefix: Wortteil vor der laufenden Nummer (Default: ``"Nutzerin"``).
+    :return: Anzahl umbenannter Nutzerinnen.
+    """
+    users = User.query.order_by(User.id).all()
+    if not users:
+        return 0
+    for u in users:
+        u.name = f"__anon_tmp_{u.id}__"
+    db.session.flush()
+    for idx, u in enumerate(users, start=1):
+        u.name = f"{prefix} {idx}"
+    db.session.commit()
+    return len(users)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -442,6 +618,39 @@ def register_cli(app: Flask) -> None:
             db.drop_all()
             db.create_all()
             print("Datenbank zurückgesetzt (alle Nutzerinnen + Einträge entfernt).")
+
+    @app.cli.command("anonymize-names")
+    @click.option(
+        "--prefix",
+        default="Nutzerin",
+        show_default=True,
+        help="Wortteil vor der laufenden Nummer.",
+    )
+    @click.option(
+        "--yes",
+        is_flag=True,
+        help="Sicherheitsabfrage überspringen (z. B. für Skripte).",
+    )
+    def anonymize_names_cmd(prefix: str, yes: bool):
+        """Anonymisiert die Namen aller Nutzerinnen.
+
+        Vergibt der Reihe nach '<prefix> 1', '<prefix> 2', ... als neue Namen.
+        Stunden, Aktiv-Status, Zeit- und Abwesenheits-Einträge bleiben
+        unverändert.
+        """
+        with app.app_context():
+            total = User.query.count()
+            if total == 0:
+                click.echo("Keine Nutzerinnen vorhanden, nichts zu tun.")
+                return
+            if not yes:
+                click.confirm(
+                    f"{total} Nutzerin(nen) werden umbenannt zu "
+                    f"'{prefix} 1' .. '{prefix} {total}'. Fortfahren?",
+                    abort=True,
+                )
+            n = anonymize_user_names(prefix=prefix)
+            click.echo(f"{n} Nutzerin(nen) anonymisiert.")
 
 
 app = create_app()

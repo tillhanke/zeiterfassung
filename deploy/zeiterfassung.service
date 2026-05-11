@@ -1,0 +1,57 @@
+[Unit]
+Description=Zeiterfassung time tracking (Gunicorn on port 80)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zeiterfassung
+Group=zeiterfassung
+WorkingDirectory=@APP_ROOT@
+Environment=PATH=@VENV@/bin:/usr/local/bin:/usr/bin:/bin
+
+# SECRET_KEY und ggf. weitere Umgebungsvariablen kommen aus /etc/zeiterfassung.env.
+# Das führende "-" macht die Datei optional – fehlt sie, startet der Service
+# zwar, fällt aber auf den unsicheren Dev-SECRET_KEY zurück (siehe app.py).
+EnvironmentFile=-/etc/zeiterfassung.env
+
+# Port 80 ohne Root binden (systemd >= 229).
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# DB initialisieren (idempotent), dann Gunicorn starten.
+ExecStartPre=@VENV@/bin/flask --app app init-db
+ExecStart=@VENV@/bin/gunicorn --bind 0.0.0.0:80 --workers 1 --threads 4 --access-logfile - app:app
+
+TimeoutStartSec=30
+Restart=on-failure
+RestartSec=5
+
+# --- Hardening ---
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+# Nur das instance/-Verzeichnis darf beschrieben werden – alles andere bleibt
+# wegen ProtectSystem=strict read-only.
+ReadWritePaths=@APP_ROOT@/instance
+# Sinnvoller Default-Filter für Web-/DB-Services.
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Netzwerk auf IPv4 + IPv6 einschränken (kein AF_PACKET o. Ä.).
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

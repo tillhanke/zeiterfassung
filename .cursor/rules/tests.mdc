@@ -1,0 +1,6 @@
+---
+alwaysApply: true
+---
+- if you edited parts of the app run the test suite
+- if you added functionality add a test for it
+- after you added or changed functionality write a git commit

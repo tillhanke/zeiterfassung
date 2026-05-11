@@ -1,0 +1,41 @@
+# Versions-Kontrolle
+.git
+.gitignore
+
+# Python-Build-/Lauf-Artefakte
+.venv
+__pycache__
+**/__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Lokale DB / Instance (darf NICHT ins Image)
+instance
+
+# Tests sollen nicht in das Production-Image
+tests
+pytest.ini
+requirements-dev.txt
+
+# Dev-/Deploy-Scripte und Cursor-Konfiguration
+build.sh
+build_init.sh
+run.sh
+deploy
+.cursor
+
+# Editor / OS
+.idea
+.vscode
+.DS_Store
+
+# Doku (außer README)
+*.md
+!README.md
+
+# Docker-Meta selbst
+Dockerfile
+.dockerignore
