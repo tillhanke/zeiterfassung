@@ -133,6 +133,17 @@ def register_context(app: Flask) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _time_values(form, prefix: str) -> list[str]:
+    """Uhrzeiten als "HH:MM" aus <prefix>_hour/<prefix>_minute (Auswahllisten
+    im Formular) oder alternativ aus einem einzelnen <prefix>_time-Feld."""
+    if f"{prefix}_hour" not in form:
+        return form.getlist(f"{prefix}_time")
+    hours = form.getlist(f"{prefix}_hour")
+    minutes = form.getlist(f"{prefix}_minute")
+    # Stunde ohne Minute gilt als volle Stunde; Minute ohne Stunde als leer.
+    return [f"{h}:{m or '00'}" if h else "" for h, m in zip(hours, minutes)]
+
+
 def parse_windows(form) -> tuple[list[logic.Window], list[tuple[str, str]], Optional[str]]:
     """Liest die Zeitfenster aus den Feldern start_time/end_time (mehrfach).
 
@@ -140,8 +151,8 @@ def parse_windows(form) -> tuple[list[logic.Window], list[tuple[str, str]], Opti
     zurück; die Rohwerte dienen dazu, das Formular nach einem Fehler mit den
     Eingaben der Nutzerin erneut anzuzeigen.
     """
-    starts = form.getlist("start_time")
-    ends = form.getlist("end_time")
+    starts = _time_values(form, "start")
+    ends = _time_values(form, "end")
     raw: list[tuple[str, str]] = []
     windows: list[logic.Window] = []
     for start_str, end_str in zip(starts, ends):

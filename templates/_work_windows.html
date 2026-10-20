@@ -1,19 +1,39 @@
 {# Zeitfenster-Eingabe für Arbeitstage (genutzt von entry_form und bulk_entry_form).
    Erwartet: windows (Liste von (start, end)-Strings), user. Muss innerhalb eines
-   <form> stehen, das Radio-Buttons name="kind" enthält. #}
+   <form> stehen, das Radio-Buttons name="kind" enthält.
+   Uhrzeiten werden als Stunde + Minute (15-min-Raster) ausgewählt; der Server
+   setzt <prefix>_hour/<prefix>_minute wieder zu HH:MM zusammen. #}
+{% macro time_select(prefix, label, value) %}
+  {% set MINUTES = ['00', '15', '30', '45'] %}
+  {% set parts = (value or '').split(':') %}
+  {% set h = parts[0] if parts|length == 2 else '' %}
+  {% set m = parts[1] if parts|length == 2 else '' %}
+  <label class="form-label small mb-1">{{ label }}</label>
+  <div class="input-group time-select {{ prefix }}-time">
+    <select name="{{ prefix }}_hour" class="form-select hour" aria-label="{{ label }}: Stunde">
+      <option value="">--</option>
+      {% for i in range(24) %}{% set v = '%02d'|format(i) %}
+        <option value="{{ v }}"{% if v == h %} selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+    <span class="input-group-text">:</span>
+    <select name="{{ prefix }}_minute" class="form-select minute" aria-label="{{ label }}: Minute">
+      <option value="">--</option>
+      {# Ältere Einträge außerhalb des Rasters nicht stillschweigend verändern. #}
+      {% if m and m not in MINUTES %}<option value="{{ m }}" selected>{{ m }}</option>{% endif %}
+      {% for v in MINUTES %}
+        <option value="{{ v }}"{% if v == m %} selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </div>
+{% endmacro %}
 <div id="workFields">
   {% if windows_label %}<label class="form-label fw-semibold">{{ windows_label }}</label>{% endif %}
   <div id="windowRows">
     {% for start, end in windows %}
       <div class="row g-2 align-items-end mb-2 window-row">
-        <div class="col">
-          <label class="form-label small mb-1">Startzeit</label>
-          <input type="time" step="900" name="start_time" class="form-control start-time" value="{{ start }}" />
-        </div>
-        <div class="col">
-          <label class="form-label small mb-1">Endzeit</label>
-          <input type="time" step="900" name="end_time" class="form-control end-time" value="{{ end }}" />
-        </div>
+        <div class="col">{{ time_select('start', 'Startzeit', start) }}</div>
+        <div class="col">{{ time_select('end', 'Endzeit', end) }}</div>
         <div class="col-auto">
           <button type="button" class="btn btn-outline-danger remove-window" aria-label="Zeitfenster entfernen">×</button>
         </div>
@@ -57,6 +77,18 @@
     function fmt(n) { return n.toFixed(2) + ' h'; }
     function minutes(v) { const [h, m] = v.split(':').map(Number); return h * 60 + m; }
 
+    // Liest "HH:MM" aus Stunden-/Minuten-Auswahl; ohne Minute gilt :00.
+    function readTime(group) {
+      const h = group.querySelector('.hour').value;
+      const m = group.querySelector('.minute').value;
+      return h ? h + ':' + (m || '00') : '';
+    }
+    function writeTime(group, value) {
+      const [h, m] = value ? value.split(':') : ['', ''];
+      group.querySelector('.hour').value = h;
+      group.querySelector('.minute').value = m;
+    }
+
     function showError(msg) {
       grossText.textContent = msg;
       breakText.textContent = '–';
@@ -74,7 +106,7 @@
 
       const windows = [];
       for (const r of rows) {
-        const s = r.querySelector('.start-time').value, e = r.querySelector('.end-time').value;
+        const s = readTime(r.querySelector('.start-time')), e = readTime(r.querySelector('.end-time'));
         if (!s && !e) continue;
         if (!s || !e) return showError('–');
         const a = minutes(s), b = minutes(e);
@@ -105,9 +137,9 @@
       const rows = rowsBox.querySelectorAll('.window-row');
       const row = rows[rows.length - 1].cloneNode(true);
       // Neues Fenster beginnt dort, wo das letzte endet.
-      const lastEnd = rows[rows.length - 1].querySelector('.end-time').value;
-      row.querySelector('.start-time').value = lastEnd;
-      row.querySelector('.end-time').value = '';
+      const lastEnd = readTime(rows[rows.length - 1].querySelector('.end-time'));
+      writeTime(row.querySelector('.start-time'), lastEnd);
+      writeTime(row.querySelector('.end-time'), '');
       rowsBox.appendChild(row);
       update();
     });
@@ -119,7 +151,7 @@
       update();
     });
 
-    rowsBox.addEventListener('input', update);
+    rowsBox.addEventListener('change', update);
     form.querySelectorAll('input[name="kind"]').forEach(r => r.addEventListener('change', update));
     update();
   })();

@@ -12,6 +12,13 @@ def _bulk_post(client, user_id, dates, kind="work", start="09:00", end="17:30", 
     return client.post(f"/user/{user_id}/bulk-entry", data=data, follow_redirects=False)
 
 
+def _minute_options(html):
+    import re
+
+    selects = re.findall(r'name="(?:start|end)_minute".*?</select>', html, re.S)
+    return [re.findall(r'<option value="([^"]*)"', s) for s in selects]
+
+
 class TestBulkGet:
     def test_form_renders(self, client, login_alice):
         r = client.get(f"/user/{login_alice}/bulk-entry")
@@ -21,9 +28,9 @@ class TestBulkGet:
         assert b"singleDate" in r.data
         assert b"rangeFrom" in r.data
 
-    def test_time_inputs_use_15_minute_steps(self, client, login_alice):
+    def test_minute_select_offers_only_quarter_hours(self, client, login_alice):
         r = client.get(f"/user/{login_alice}/bulk-entry")
-        assert r.data.count(b'type="time" step="900"') == 2
+        assert _minute_options(r.data.decode()) == [["", "00", "15", "30", "45"]] * 2
 
     def test_holidays_json_in_form(self, client, login_alice):
         r = client.get(f"/user/{login_alice}/bulk-entry")

@@ -1,6 +1,7 @@
 """Tests für den Einzel-Tageseintrag (entry_form + delete_day)."""
 from __future__ import annotations
 
+import re
 from datetime import date, time
 
 from models import Absence, WorkDay
@@ -17,6 +18,23 @@ def _post_entry(client, user_id, **overrides):
     return client.post(f"/user/{user_id}/entry", data=payload, follow_redirects=False)
 
 
+def _minute_options(html):
+    selects = re.findall(r'name="(?:start|end)_minute".*?</select>', html, re.S)
+    return [re.findall(r'<option value="([^"]*)"', s) for s in selects]
+
+
+def _selected_times(html):
+    """Ausgewählte Zeiten je Zeile als (start, end)-Paare im Format HH:MM."""
+    sel = {
+        f: re.findall(rf'name="{f}".*?<option value="([^"]*)" selected', html, re.S)
+        for f in ("start_hour", "start_minute", "end_hour", "end_minute")
+    }
+    return [
+        (f"{sh}:{sm}", f"{eh}:{em}")
+        for sh, sm, eh, em in zip(sel["start_hour"], sel["start_minute"], sel["end_hour"], sel["end_minute"])
+    ]
+
+
 class TestEntryFormGet:
     def test_get_form_renders(self, client, login_alice):
         r = client.get(f"/user/{login_alice}/entry")
@@ -26,9 +44,14 @@ class TestEntryFormGet:
         assert b"Urlaub" in r.data
         assert b"Krank" in r.data
 
-    def test_time_inputs_use_15_minute_steps(self, client, login_alice):
+    def test_minute_select_offers_only_quarter_hours(self, client, login_alice):
         r = client.get(f"/user/{login_alice}/entry")
-        assert r.data.count(b'type="time" step="900"') == 2
+        assert _minute_options(r.data.decode()) == [["", "00", "15", "30", "45"]] * 2
+
+    def test_hour_select_offers_full_day(self, client, login_alice):
+        html = client.get(f"/user/{login_alice}/entry").data.decode()
+        hours = re.findall(r'name="start_hour".*?</select>', html, re.S)[0]
+        assert re.findall(r'<option value="([^"]*)"', hours) == [""] + [f"{h:02d}" for h in range(24)]
 
     def test_prefill_date_in_form(self, client, login_alice):
         r = client.get(f"/user/{login_alice}/entry?date=2026-05-11")
@@ -207,7 +230,7 @@ class TestEntryMultipleWindows:
         r = _post_windows(client, login_alice, [("08:00", "12:00"), ("11:30", "17:00")])
         assert r.status_code == 200
         assert "überschneiden".encode() in r.data
-        assert b'value="11:30"' in r.data
+        assert _selected_times(r.data.decode()) == [("08:00", "12:00"), ("11:30", "17:00")]
         # Bestehender Eintrag bleibt unverändert.
         assert _windows(app, login_alice) == [(time(9, 0), time(17, 0))]
 
@@ -220,13 +243,16 @@ class TestEntryMultipleWindows:
         make_workday(login_alice, date(2026, 5, 11), time(13, 15), time(17, 0))
         make_workday(login_alice, date(2026, 5, 11), time(7, 45), time(12, 0))
         r = client.get(f"/user/{login_alice}/entry?date=2026-05-11")
-        html = r.data.decode()
-        assert html.index('value="07:45"') < html.index('value="13:15"')
+        assert _selected_times(r.data.decode()) == [("07:45", "12:00"), ("13:15", "17:00")]
+
+    def test_off_grid_existing_time_is_kept(self, client, login_alice, make_workday):
+        make_workday(login_alice, date(2026, 5, 11), time(8, 7), time(16, 0))
+        r = client.get(f"/user/{login_alice}/entry?date=2026-05-11")
+        assert _selected_times(r.data.decode()) == [("08:07", "16:00")]
 
     def test_get_without_entry_uses_default_window(self, client, login_alice):
         r = client.get(f"/user/{login_alice}/entry?date=2026-05-11")
-        assert b'value="09:00"' in r.data
-        assert b'value="17:30"' in r.data
+        assert _selected_times(r.data.decode()) == [("09:00", "17:30")]
 
     def test_vacation_removes_all_windows(self, client, login_alice, app, make_workday):
         make_workday(login_alice, date(2026, 5, 11), time(8, 0), time(12, 0))
@@ -238,4 +264,40 @@ class TestEntryMultipleWindows:
         make_workday(login_alice, date(2026, 5, 11), time(8, 0), time(12, 0))
         make_workday(login_alice, date(2026, 5, 11), time(13, 0), time(17, 0))
         client.post(f"/user/{login_alice}/day/2026-05-11/delete")
+        assert _windows(app, login_alice) == []
+
+
+class TestEntryHourMinuteSelects:
+    def _post(self, client, user_id, **fields):
+        data = {"kind": "work", "date": "2026-05-11"}
+        data.update(fields)
+        return client.post(f"/user/{user_id}/entry", data=data)
+
+    def test_hour_and_minute_combined(self, client, login_alice, app):
+        r = self._post(
+            client, login_alice,
+            start_hour=["08", "13"], start_minute=["15", "00"],
+            end_hour=["12", "17"], end_minute=["00", "45"],
+        )
+        assert r.status_code == 302
+        assert _windows(app, login_alice) == [
+            (time(8, 15), time(12, 0)),
+            (time(13, 0), time(17, 45)),
+        ]
+
+    def test_hour_without_minute_means_full_hour(self, client, login_alice, app):
+        self._post(client, login_alice, start_hour="08", start_minute="", end_hour="12", end_minute="30")
+        assert _windows(app, login_alice) == [(time(8, 0), time(12, 30))]
+
+    def test_empty_row_ignored(self, client, login_alice, app):
+        self._post(
+            client, login_alice,
+            start_hour=["08", ""], start_minute=["00", ""],
+            end_hour=["12", ""], end_minute=["00", ""],
+        )
+        assert _windows(app, login_alice) == [(time(8, 0), time(12, 0))]
+
+    def test_missing_end_hour_rejected(self, client, login_alice, app):
+        r = self._post(client, login_alice, start_hour="08", start_minute="00", end_hour="", end_minute="30")
+        assert r.status_code == 200
         assert _windows(app, login_alice) == []
