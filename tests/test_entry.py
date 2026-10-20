@@ -26,6 +26,10 @@ class TestEntryFormGet:
         assert b"Urlaub" in r.data
         assert b"Krank" in r.data
 
+    def test_time_inputs_use_15_minute_steps(self, client, login_alice):
+        r = client.get(f"/user/{login_alice}/entry")
+        assert r.data.count(b'type="time" step="900"') == 2
+
     def test_prefill_date_in_form(self, client, login_alice):
         r = client.get(f"/user/{login_alice}/entry?date=2026-05-11")
         assert r.status_code == 200

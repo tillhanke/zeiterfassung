@@ -8,11 +8,11 @@
       <div class="row g-2 align-items-end mb-2 window-row">
         <div class="col">
           <label class="form-label small mb-1">Startzeit</label>
-          <input type="time" name="start_time" class="form-control start-time" value="{{ start }}" />
+          <input type="time" step="900" name="start_time" class="form-control start-time" value="{{ start }}" />
         </div>
         <div class="col">
           <label class="form-label small mb-1">Endzeit</label>
-          <input type="time" name="end_time" class="form-control end-time" value="{{ end }}" />
+          <input type="time" step="900" name="end_time" class="form-control end-time" value="{{ end }}" />
         </div>
         <div class="col-auto">
           <button type="button" class="btn btn-outline-danger remove-window" aria-label="Zeitfenster entfernen">×</button>

@@ -21,6 +21,10 @@ class TestBulkGet:
         assert b"singleDate" in r.data
         assert b"rangeFrom" in r.data
 
+    def test_time_inputs_use_15_minute_steps(self, client, login_alice):
+        r = client.get(f"/user/{login_alice}/bulk-entry")
+        assert r.data.count(b'type="time" step="900"') == 2
+
     def test_holidays_json_in_form(self, client, login_alice):
         r = client.get(f"/user/{login_alice}/bulk-entry")
         # Tag der Arbeit muss als Feiertag im JS bekannt sein.
