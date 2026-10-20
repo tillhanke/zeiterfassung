@@ -83,5 +83,37 @@
     integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
     crossorigin="anonymous"
   ></script>
+  {% if active_identity %}
+  <script>
+    // Inaktivitäts-Timeout: ohne Maus/Tastatur/Scroll/Touch wechselt die Seite
+    // nach idle_timeout_seconds zur Willkommensseite. Aktivität wird höchstens
+    // einmal pro Minute an den Server gemeldet, damit z. B. langes Ausfüllen
+    // eines Formulars nicht serverseitig als Inaktivität zählt.
+    (function () {
+      const TIMEOUT_MS = {{ idle_timeout_seconds * 1000 }};
+      const PING_MS = 60 * 1000;
+      const TIMEOUT_URL = '{{ url_for("idle_timeout") }}';
+      let lastActivity = Date.now();
+      let lastPing = Date.now();
+
+      function onActivity() {
+        lastActivity = Date.now();
+        if (lastActivity - lastPing < PING_MS) return;
+        lastPing = lastActivity;
+        fetch('{{ url_for("keepalive") }}', { method: 'POST', credentials: 'same-origin' })
+          .then(r => { if (r.status === 401) window.location.href = TIMEOUT_URL; })
+          .catch(() => {});
+      }
+
+      ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'change'].forEach(
+        ev => document.addEventListener(ev, onActivity, { passive: true, capture: true })
+      );
+      // Intervall statt einmaligem setTimeout: funktioniert auch nach Standby korrekt.
+      setInterval(() => {
+        if (Date.now() - lastActivity >= TIMEOUT_MS) window.location.href = TIMEOUT_URL;
+      }, 5000);
+    })();
+  </script>
+  {% endif %}
 </body>
 </html>
