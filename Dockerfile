@@ -3,7 +3,9 @@
 # Konfiguration: SECRET_KEY MUSS per Environment gesetzt werden.
 FROM python:3.13-slim-bookworm
 
-ENV PYTHONUNBUFFERED=1 \
+# TZ: "Anfang"/"Ende" stempeln die lokale Uhrzeit; ohne TZ liefe der Container in UTC.
+ENV TZ=Europe/Berlin \
+    PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1

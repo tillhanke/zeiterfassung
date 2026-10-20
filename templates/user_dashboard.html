@@ -143,7 +143,7 @@
             </td>
             <td class="text-end">
               {% if d.kind == 'work' and d.windows %}
-                {% for s, e in d.windows %}{{ e.strftime('%H:%M') }}{% if not loop.last %}<br />{% endif %}{% endfor %}
+                {% for s, e in d.windows %}{% if e %}{{ e.strftime('%H:%M') }}{% else %}<span class="badge bg-success">läuft</span>{% endif %}{% if not loop.last %}<br />{% endif %}{% endfor %}
               {% else %}–{% endif %}
             </td>
             <td class="text-end">
@@ -156,9 +156,20 @@
             <td><small class="text-muted">{{ d.note }}</small></td>
             <td class="text-end">
               {% if d.kind != 'holiday' %}
+                {% if d.date == today and d.kind in ('work', 'empty', 'weekend') %}
+                  {% if d.running %}
+                    <form method="post" action="{{ url_for('clock_end', user_id=user.id) }}" class="d-inline">
+                      <button class="btn btn-sm btn-danger" type="submit">Ende</button>
+                    </form>
+                  {% else %}
+                    <form method="post" action="{{ url_for('clock_start', user_id=user.id) }}" class="d-inline">
+                      <button class="btn btn-sm btn-success" type="submit">Anfang</button>
+                    </form>
+                  {% endif %}
+                {% endif %}
                 <a class="btn btn-sm btn-outline-primary"
                    href="{{ url_for('entry_form', user_id=user.id, date=d.date.isoformat()) }}">
-                  Eintragen
+                  Ändern
                 </a>
               {% endif %}
               {% if d.kind in ('work','vacation','sick') %}

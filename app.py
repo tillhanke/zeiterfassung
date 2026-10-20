@@ -390,7 +390,10 @@ def register_routes(app: Flask) -> None:
                 d = None
             if d:
                 existing = [
-                    (w.start_time.strftime("%H:%M"), w.end_time.strftime("%H:%M"))
+                    (
+                        w.start_time.strftime("%H:%M"),
+                        w.end_time.strftime("%H:%M") if w.end_time else "",
+                    )
                     for w in WorkDay.query.filter_by(user_id=user.id, date=d)
                     .order_by(WorkDay.start_time)
                     .all()
@@ -493,6 +496,81 @@ def register_routes(app: Flask) -> None:
             )
 
         return render_form()
+
+    # ----- Anfang/Ende stempeln (heute, auf 15 min gerundet) -----
+
+    def _redirect_today(user: User):
+        today = date.today()
+        return redirect(
+            url_for("user_dashboard", user_id=user.id, year=today.year, month=today.month)
+        )
+
+    @app.post("/user/<int:user_id>/clock/start")
+    def clock_start(user_id: int):
+        user = _ensure_self(user_id)
+        now = datetime.now()
+        today = now.date()
+        start_t = logic.round_to_quarter(now)
+
+        if logic.is_holiday(today):
+            flash("An Feiertagen kann keine Arbeitszeit gestempelt werden.", "danger")
+            return _redirect_today(user)
+        if Absence.query.filter_by(user_id=user.id, date=today).first():
+            flash("Für heute ist Urlaub/Krank eingetragen.", "danger")
+            return _redirect_today(user)
+        other_open = WorkDay.query.filter(
+            WorkDay.user_id == user.id,
+            WorkDay.end_time.is_(None),
+            WorkDay.date != today,
+        ).first()
+        if other_open:
+            flash(
+                f"Vom {other_open.date.isoformat()} läuft noch ein Zeitfenster – "
+                "bitte dort zuerst über „Ändern“ eine Endzeit setzen.",
+                "danger",
+            )
+            return _redirect_today(user)
+
+        existing = WorkDay.query.filter_by(user_id=user.id, date=today).all()
+        error = logic.check_clock_start(
+            [(w.start_time, w.end_time) for w in existing], start_t
+        )
+        if error:
+            flash(error, "danger")
+            return _redirect_today(user)
+
+        db.session.add(
+            WorkDay(user_id=user.id, date=today, start_time=start_t, end_time=None)
+        )
+        db.session.commit()
+        flash(f"Anfang {start_t:%H:%M} gesetzt.", "success")
+        return _redirect_today(user)
+
+    @app.post("/user/<int:user_id>/clock/end")
+    def clock_end(user_id: int):
+        user = _ensure_self(user_id)
+        now = datetime.now()
+        today = now.date()
+        end_t = logic.round_to_quarter(now)
+
+        running = WorkDay.query.filter_by(
+            user_id=user.id, date=today, end_time=None
+        ).first()
+        if not running:
+            flash("Heute läuft kein Zeitfenster.", "warning")
+            return _redirect_today(user)
+        error = logic.check_clock_end(running.start_time, end_t)
+        if error:
+            flash(error, "warning")
+            return _redirect_today(user)
+
+        running.end_time = end_t
+        db.session.commit()
+        flash(
+            f"Ende {end_t:%H:%M} gesetzt ({running.start_time:%H:%M}–{end_t:%H:%M}).",
+            "success",
+        )
+        return _redirect_today(user)
 
     @app.post("/user/<int:user_id>/day/<iso_date>/delete")
     def delete_day(user_id: int, iso_date: str):
@@ -632,30 +710,41 @@ def anonymize_user_names(prefix: str = "Nutzerin") -> int:
 # ---------------------------------------------------------------------------
 
 
-def migrate_workdays_allow_multiple_windows() -> bool:
-    """Entfernt den alten UNIQUE(user_id, date)-Constraint aus `workdays`.
+def migrate_workdays_schema() -> bool:
+    """Bringt eine ältere `workdays`-Tabelle auf das aktuelle Schema.
 
-    Ältere Datenbanken erlauben nur ein Zeitfenster pro Tag. SQLite kann
-    Constraints nicht per ALTER TABLE entfernen, daher wird die Tabelle neu
-    aufgebaut und die Daten werden übernommen. Idempotent; gibt True zurück,
-    wenn migriert wurde.
+    - UNIQUE(user_id, date) entfällt (mehrere Zeitfenster pro Tag)
+    - end_time wird nullable (laufendes Zeitfenster per "Anfang")
+
+    SQLite kann Constraints nicht per ALTER TABLE ändern, daher wird die
+    Tabelle neu aufgebaut und die Daten werden übernommen. Idempotent; gibt
+    True zurück, wenn migriert wurde.
     """
     ddl = db.session.execute(
         text("SELECT sql FROM sqlite_master WHERE type='table' AND name='workdays'")
     ).scalar()
-    if not ddl or "uq_workday_user_date" not in ddl:
+    if not ddl:
         return False
-    db.session.execute(text("ALTER TABLE workdays RENAME TO workdays_old"))
-    db.session.commit()
-    WorkDay.__table__.create(db.engine)
-    db.session.execute(
-        text(
-            "INSERT INTO workdays (id, user_id, date, start_time, end_time) "
-            "SELECT id, user_id, date, start_time, end_time FROM workdays_old"
+    normalized = " ".join(ddl.split())
+    if (
+        "uq_workday_user_date" not in normalized
+        and "end_time TIME NOT NULL" not in normalized
+    ):
+        return False
+    db.session.close()
+    # Eine Transaktion: schlägt ein Schritt fehl, bleibt die alte Tabelle intakt.
+    with db.engine.begin() as conn:
+        conn.execute(text("ALTER TABLE workdays RENAME TO workdays_old"))
+        # Indizes wandern beim RENAME mit und würden den Neuaufbau blockieren.
+        conn.execute(text("DROP INDEX IF EXISTS ix_workdays_user_date"))
+        WorkDay.__table__.create(conn)
+        conn.execute(
+            text(
+                "INSERT INTO workdays (id, user_id, date, start_time, end_time) "
+                "SELECT id, user_id, date, start_time, end_time FROM workdays_old"
+            )
         )
-    )
-    db.session.execute(text("DROP TABLE workdays_old"))
-    db.session.commit()
+        conn.execute(text("DROP TABLE workdays_old"))
     return True
 
 
@@ -669,8 +758,8 @@ def register_cli(app: Flask) -> None:
     def init_db_cmd():
         """Legt die Datenbank-Tabellen an (ohne Daten anzulegen)."""
         with app.app_context():
-            if migrate_workdays_allow_multiple_windows():
-                print("Tabelle workdays migriert (mehrere Zeitfenster pro Tag).")
+            if migrate_workdays_schema():
+                print("Tabelle workdays auf aktuelles Schema migriert.")
             db.create_all()
             print("Datenbank initialisiert.")
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import calendar
 from dataclasses import dataclass, field
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 from functools import lru_cache
 from typing import Iterable, Optional
 
@@ -47,11 +47,17 @@ def workday_net_hours(wd: WorkDay) -> float:
     return net_hours(gross_hours(wd.start_time, wd.end_time))
 
 
-Window = tuple[time, time]
+# (start, end); end = None heißt: Fenster läuft noch.
+Window = tuple[time, Optional[time]]
+
+
+def _closed(windows: Iterable[Window]) -> list[tuple[time, time]]:
+    """Nur abgeschlossene Fenster; laufende zählen erst nach "Ende"."""
+    return [(s, e) for s, e in windows if e is not None]
 
 
 def windows_gross_hours(windows: Iterable[Window]) -> float:
-    return sum(gross_hours(s, e) for s, e in windows)
+    return sum(gross_hours(s, e) for s, e in _closed(windows))
 
 
 def windows_break_hours(windows: Iterable[Window]) -> float:
@@ -61,11 +67,53 @@ def windows_break_hours(windows: Iterable[Window]) -> float:
     Fenster die Schwelle (>6h bzw. >9h) überschreitet. Zwei Fenster à 4h
     ergeben also keinen Abzug.
     """
-    return sum(legal_break(gross_hours(s, e)) for s, e in windows)
+    return sum(legal_break(gross_hours(s, e)) for s, e in _closed(windows))
 
 
 def windows_net_hours(windows: Iterable[Window]) -> float:
-    return sum(net_hours(gross_hours(s, e)) for s, e in windows)
+    return sum(net_hours(gross_hours(s, e)) for s, e in _closed(windows))
+
+
+QUARTER_MINUTES = 15
+_LAST_QUARTER = 23 * 60 + 45
+
+
+def round_to_quarter(now: datetime) -> time:
+    """Rundet auf die nächste Viertelstunde (08:07 -> 08:00, 08:08 -> 08:15).
+
+    Nach 23:52 würde auf 24:00 gerundet; das ist keine gültige Uhrzeit des
+    Tages, daher wird auf 23:45 begrenzt.
+    """
+    minutes = now.hour * 60 + now.minute + now.second / 60
+    rounded = int(minutes / QUARTER_MINUTES + 0.5) * QUARTER_MINUTES
+    rounded = min(rounded, _LAST_QUARTER)
+    return time(rounded // 60, rounded % 60)
+
+
+def check_clock_start(windows: list[Window], start: time) -> Optional[str]:
+    """Darf am Tag ein neues Fenster ab `start` laufen? Fehlermeldung oder None.
+
+    Das laufende Fenster ist nach hinten offen, darf also hinter keinem
+    vorhandenen Fenster beginnen.
+    """
+    if any(e is None for _, e in windows):
+        return "Es läuft bereits ein Zeitfenster."
+    latest_end = max((e for _, e in windows), default=None)
+    if latest_end is not None and start < latest_end:
+        return (
+            f"Anfang {start:%H:%M} liegt vor dem Ende des letzten Zeitfensters "
+            f"({latest_end:%H:%M})."
+        )
+    return None
+
+
+def check_clock_end(start: time, end: time) -> Optional[str]:
+    if end <= start:
+        return (
+            f"Ende {end:%H:%M} (gerundet) liegt nicht nach dem Anfang {start:%H:%M} – "
+            "Zeitfenster läuft weiter."
+        )
+    return None
 
 
 def validate_windows(windows: list[Window]) -> Optional[str]:
@@ -91,7 +139,7 @@ def group_windows_by_date(workdays: Iterable[WorkDay]) -> dict[date, list[Window
     for w in workdays:
         by_date.setdefault(w.date, []).append((w.start_time, w.end_time))
     for windows in by_date.values():
-        windows.sort()
+        windows.sort(key=lambda w: w[0])  # end kann None sein -> nur nach Start
     return by_date
 
 
@@ -179,6 +227,10 @@ class DaySummary:
     target: float
     note: str = ""
     windows: list[Window] = field(default_factory=list)
+
+    @property
+    def running(self) -> bool:
+        return any(e is None for _, e in self.windows)
 
     @property
     def start(self) -> Optional[time]:
@@ -275,6 +327,9 @@ def build_month_summary(
                 note = f"{base_note} · Wochenende: zählt als Überstunden"
             else:
                 note = base_note
+            open_starts = [s for s, e in windows if e is None]
+            if open_starts:
+                note = f"läuft seit {open_starts[0]:%H:%M} · {note}"
             days.append(
                 DaySummary(
                     d, d.weekday(), "work", g, n, target, note, windows=windows,
@@ -427,6 +482,10 @@ assert windows_net_hours([(time(8, 0), time(12, 0)), (time(13, 0), time(17, 0))]
 assert windows_net_hours([(time(8, 0), time(15, 0)), (time(16, 0), time(18, 0))]) == 8.5
 assert validate_windows([(time(8, 0), time(12, 0)), (time(11, 0), time(14, 0))]) is not None
 assert validate_windows([(time(8, 0), time(12, 0)), (time(12, 0), time(14, 0))]) is None
+assert round_to_quarter(datetime(2026, 5, 11, 8, 7)) == time(8, 0)
+assert round_to_quarter(datetime(2026, 5, 11, 8, 8)) == time(8, 15)
+assert round_to_quarter(datetime(2026, 5, 11, 23, 59)) == time(23, 45)
+assert windows_net_hours([(time(8, 0), time(12, 0)), (time(13, 0), None)]) == 4.0
 assert shift_month(2026, 1, -1) == (2025, 12)
 assert shift_month(2026, 12, 1) == (2027, 1)
 # Bekannte Ostersonntage zur Verifikation des Algorithmus.

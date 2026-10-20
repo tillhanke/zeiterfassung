@@ -65,6 +65,35 @@ class TestMigrateWorkdays:
         assert "migriert" not in result.output
 
 
+class TestMigrateEndTimeNullable:
+    def test_not_null_end_time_is_relaxed(self, app, runner):
+        from sqlalchemy import text
+
+        with app.app_context():
+            db.session.execute(text("DROP TABLE workdays"))
+            db.session.execute(
+                text(
+                    "CREATE TABLE workdays (id INTEGER NOT NULL, user_id INTEGER NOT NULL, "
+                    "date DATE NOT NULL, start_time TIME NOT NULL, end_time TIME NOT NULL, "
+                    "PRIMARY KEY (id), FOREIGN KEY(user_id) REFERENCES users (id))"
+                )
+            )
+            # Index wie in DBs aus dem Mehrfenster-Release (wandert beim RENAME mit).
+            db.session.execute(text("CREATE INDEX ix_workdays_user_date ON workdays (user_id, date)"))
+            u = User(name="Alt", weekly_hours=40)
+            db.session.add(u)
+            db.session.commit()
+            uid = u.id
+
+        result = runner.invoke(args=["init-db"])
+        assert "migriert" in result.output
+
+        with app.app_context():
+            db.session.add(WorkDay(user_id=uid, date=date(2026, 5, 11), start_time=time(8, 0), end_time=None))
+            db.session.commit()
+            assert WorkDay.query.one().end_time is None
+
+
 class TestResetDb:
     def test_clears_all_data(self, app, runner):
         with app.app_context():

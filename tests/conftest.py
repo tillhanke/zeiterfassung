@@ -7,7 +7,7 @@ und können auch parallelisiert werden.
 from __future__ import annotations
 
 from datetime import date, time
-from typing import Iterator
+from typing import Iterator, Optional
 
 import pytest
 from flask import Flask
@@ -117,7 +117,7 @@ def login_admin(client: FlaskClient) -> None:
 def make_workday(app: Flask):
     """Factory: legt einen WorkDay an und committet."""
 
-    def _make(user_id: int, d: date, start: time = time(9, 0), end: time = time(17, 30)):
+    def _make(user_id: int, d: date, start: time = time(9, 0), end: Optional[time] = time(17, 30)):
         with app.app_context():
             wd = WorkDay(user_id=user_id, date=d, start_time=start, end_time=end)
             _db.session.add(wd)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, time
+from typing import Optional
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Index, UniqueConstraint
@@ -35,7 +36,11 @@ class User(db.Model):
 
 class WorkDay(db.Model):
     """Ein Arbeitszeitfenster. Pro Tag sind mehrere Fenster möglich; die
-    gesetzliche Pause wird je Fenster separat bestimmt (siehe logic.py)."""
+    gesetzliche Pause wird je Fenster separat bestimmt (siehe logic.py).
+
+    end_time = None bedeutet: das Fenster läuft noch (per "Anfang" gestartet,
+    "Ende" noch nicht gedrückt). Laufende Fenster zählen noch nicht in die Summen.
+    """
 
     __tablename__ = "workdays"
     __table_args__ = (Index("ix_workdays_user_date", "user_id", "date"),)
@@ -44,7 +49,7 @@ class WorkDay(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     date: date = db.Column(db.Date, nullable=False)
     start_time: time = db.Column(db.Time, nullable=False)
-    end_time: time = db.Column(db.Time, nullable=False)
+    end_time: Optional[time] = db.Column(db.Time, nullable=True)
 
     def __repr__(self) -> str:
         return f"<WorkDay user={self.user_id} {self.date} {self.start_time}-{self.end_time}>"
