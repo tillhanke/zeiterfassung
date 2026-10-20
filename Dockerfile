@@ -23,8 +23,11 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 COPY --chown=appuser:appuser . .
 
 # Instance-Verzeichnis vorbereiten und Entrypoint ausführbar machen.
+# sed: Windows-Zeilenenden (CRLF) entfernen, falls das Repo unter Windows
+# ausgecheckt wurde – sonst scheitert der Start mit "no such file or directory".
 RUN mkdir -p /app/instance \
  && chown -R appuser:appuser /app/instance \
+ && sed -i 's/\r$//' /app/docker-entrypoint.sh \
  && chmod 0755 /app/docker-entrypoint.sh
 
 USER appuser

@@ -1,0 +1,4 @@
+# Shell-Skripte laufen im Linux-Container: immer LF, auch bei Checkout unter
+# Windows (core.autocrlf), sonst scheitert der Container-Start.
+*.sh text eol=lf
+Dockerfile text eol=lf
