@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from datetime import date, datetime, timedelta
 from functools import wraps
 from typing import Optional
@@ -19,6 +20,7 @@ from sqlalchemy import text
 from flask import (
     Flask,
     abort,
+    current_app,
     flash,
     redirect,
     render_template,
@@ -40,6 +42,8 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
         SECRET_KEY=os.environ.get("SECRET_KEY") or "dev-secret-key-change-me",
         SQLALCHEMY_DATABASE_URI="sqlite:///zeiterf.db",
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        # Nach so vielen Sekunden ohne Aktivität geht es zurück zur Willkommensseite.
+        IDLE_TIMEOUT_SECONDS=600,
     )
 
     # SQLite im instance-Folder ablegen, damit es bei `flask run` automatisch
@@ -56,6 +60,7 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
 
     db.init_app(app)
 
+    register_idle_timeout(app)
     register_routes(app)
     register_cli(app)
     register_context(app)
@@ -109,6 +114,73 @@ def require_identity(role: str):
 
 
 # ---------------------------------------------------------------------------
+# Inaktivitäts-Timeout
+# ---------------------------------------------------------------------------
+
+# Toleranz für /timeout: Der Browser meldet Aktivität nur gedrosselt (max. 1x
+# pro Minute) bzw. die letzte Anfrage kann minimal nach der letzten Eingabe
+# angekommen sein.
+IDLE_TOLERANCE_SECONDS = 30
+
+
+def _epoch() -> float:
+    return time.time()
+
+
+def _idle_seconds() -> Optional[float]:
+    last = session.get("last_activity")
+    return None if last is None else _epoch() - last
+
+
+def _logout_idle() -> None:
+    session.pop("identity", None)
+    session.pop("last_activity", None)
+    minutes = round(current_app.config["IDLE_TIMEOUT_SECONDS"] / 60)
+    flash(f"Wegen {minutes} Minuten Inaktivität zur Startseite gewechselt.", "info")
+
+
+def register_idle_timeout(app: Flask) -> None:
+    """Server-seitige Absicherung des Timeouts.
+
+    Jede Anfrage mit aktiver Identität zählt als Aktivität. Ist die letzte
+    Aktivität länger als IDLE_TIMEOUT_SECONDS her (z. B. Tab im Ruhezustand),
+    wird die Identität verworfen und auf die Willkommensseite umgeleitet.
+    Der Browser-Teil (base.html) wechselt bei Inaktivität von selbst.
+    """
+
+    @app.before_request
+    def enforce_idle_timeout():
+        if request.endpoint == "static" or not session.get("identity"):
+            return None
+        idle = _idle_seconds()
+        if idle is not None and idle > app.config["IDLE_TIMEOUT_SECONDS"]:
+            _logout_idle()
+            if request.endpoint == "keepalive":
+                return "", 401
+            return redirect(url_for("index"))
+        # /timeout prüft selbst und darf die Aktivität nicht auffrischen.
+        if request.endpoint != "idle_timeout":
+            session["last_activity"] = _epoch()
+        return None
+
+    @app.post("/keepalive")
+    def keepalive():
+        if not session.get("identity"):
+            return "", 401
+        return "", 204
+
+    @app.get("/timeout")
+    def idle_timeout():
+        # Nur abmelden, wenn auch der Server keine neuere Aktivität kennt –
+        # sonst würde ein inaktiver Tab einen parallel aktiven Tab abmelden.
+        idle = _idle_seconds()
+        limit = app.config["IDLE_TIMEOUT_SECONDS"] - IDLE_TOLERANCE_SECONDS
+        if session.get("identity") and (idle is None or idle >= limit):
+            _logout_idle()
+        return redirect(url_for("index"))
+
+
+# ---------------------------------------------------------------------------
 # Context Processor: Topbar braucht User-Liste und aktive Identität
 # ---------------------------------------------------------------------------
 
@@ -125,6 +197,7 @@ def register_context(app: Flask) -> None:
             "active_identity": current_identity(),
             "active_user": current_user(),
             "today": date.today(),
+            "idle_timeout_seconds": app.config["IDLE_TIMEOUT_SECONDS"],
         }
 
 
@@ -210,6 +283,7 @@ def register_routes(app: Flask) -> None:
     @app.post("/switch")
     def switch():
         target = request.form.get("identity", "")
+        session["last_activity"] = _epoch()
         if target == "admin":
             session["identity"] = "admin"
             return redirect(url_for("admin"))
