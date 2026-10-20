@@ -13,3 +13,6 @@ instance/*.db-journal
 .DS_Store
 .idea/
 .vscode/
+
+# Secrets für docker compose
+.env

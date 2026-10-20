@@ -1,0 +1,22 @@
+# Zeiterfassung — Flask + SQLite via Docker Compose.
+#
+# Start:
+#   echo "SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')" > .env
+#   docker compose up -d --build
+#
+# Die SQLite-Datei liegt in ./instance auf dem Host. Der Container läuft als
+# UID 1000 – auf Linux muss ./instance für diese UID beschreibbar sein.
+services:
+  zeiterfassung:
+    build: .
+    image: zeiterfassung
+    container_name: zeiterfassung
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      # Pflicht: ohne SECRET_KEY bricht `docker compose` mit Fehler ab.
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY muss gesetzt sein (z. B. in .env)}
+    volumes:
+      - ./instance:/app/instance
+    # Healthcheck kommt aus dem Dockerfile.

@@ -39,3 +39,7 @@ deploy
 # Docker-Meta selbst
 Dockerfile
 .dockerignore
+
+# Compose-Datei und Secrets
+compose.yaml
+.env
