@@ -19,15 +19,17 @@ from models import Absence, User, WorkDay, db as _db
 
 @pytest.fixture
 def app(tmp_path) -> Iterator[Flask]:
-    flask_app = create_app()
-    # create_app() setzt die URI auf instance/zeiterf.db – das überschreiben
-    # wir hier, BEVOR die Engine zum ersten Mal genutzt wird.
-    flask_app.config.update(
-        TESTING=True,
-        SECRET_KEY="test-secret-key",
-        SQLALCHEMY_DATABASE_URI=f"sqlite:///{tmp_path}/test.db",
-        SQLALCHEMY_TRACK_MODIFICATIONS=False,
-        WTF_CSRF_ENABLED=False,
+    # Config muss an create_app() übergeben werden: Flask-SQLAlchemy bindet die
+    # Engine in init_app(); ein späteres config.update() würde ignoriert und die
+    # Tests liefen gegen instance/zeiterf.db (inkl. drop_all am Ende!).
+    flask_app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test-secret-key",
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path}/test.db",
+            "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+            "WTF_CSRF_ENABLED": False,
+        }
     )
     with flask_app.app_context():
         _db.create_all()

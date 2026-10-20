@@ -37,3 +37,21 @@ class TestSqliteUri:
         assert uri.endswith("/zeiterf.db")
         # Liegt im instance-Pfad des Apps.
         assert app.instance_path in uri
+
+
+class TestTestIsolation:
+    def test_fixture_engine_uses_tmp_db(self, app, tmp_path):
+        # Regression: Tests liefen früher gegen instance/zeiterf.db und
+        # leerten sie per drop_all().
+        from models import db
+
+        with app.app_context():
+            assert str(tmp_path) in str(db.engine.url)
+
+    def test_override_applies_before_engine_creation(self, tmp_path):
+        from app import create_app
+        from models import db
+
+        app = create_app({"SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path}/x.db"})
+        with app.app_context():
+            assert str(db.engine.url).endswith("/x.db")

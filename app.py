@@ -30,7 +30,7 @@ import logic
 from models import Absence, User, WorkDay, db
 
 
-def create_app() -> Flask:
+def create_app(test_config: Optional[dict] = None) -> Flask:
     app = Flask(__name__)
     # SECRET_KEY MUSS in Produktion über die Umgebungsvariable gesetzt werden.
     # Der Dev-Fallback ist absichtlich unsicher und wird nur akzeptiert, wenn
@@ -47,6 +47,11 @@ def create_app() -> Flask:
         f"sqlite:///{app.instance_path}/zeiterf.db"
     )
     os.makedirs(app.instance_path, exist_ok=True)
+
+    # Overrides (z. B. Test-DB) MÜSSEN vor db.init_app greifen: Flask-SQLAlchemy
+    # legt die Engine dort bereits an und ignoriert spätere Config-Änderungen.
+    if test_config:
+        app.config.update(test_config)
 
     db.init_app(app)
 
