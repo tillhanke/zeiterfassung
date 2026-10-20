@@ -155,7 +155,7 @@
             </td>
             <td><small class="text-muted">{{ d.note }}</small></td>
             <td class="text-end">
-              {% if d.kind not in ('weekend', 'holiday') %}
+              {% if d.kind != 'holiday' %}
                 <a class="btn btn-sm btn-outline-primary"
                    href="{{ url_for('entry_form', user_id=user.id, date=d.date.isoformat()) }}">
                   Eintragen

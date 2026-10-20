@@ -377,6 +377,27 @@ class TestBuildMonthSummary:
         assert wday.net == pytest.approx(8.5)
         assert "Pause 30 min" in wday.note
 
+    def test_weekend_work_counts_fully_as_overtime(self):
+        # Sa 9.5.2026: Soll 0, Ist = Netto -> komplette Arbeitszeit ist Plus.
+        wds = [_wd(date(2026, 5, 9), time(9, 0), time(13, 0))]
+        sm = build_month_summary(_user(), 2026, 5, wds, [], today=date(2026, 5, 31))
+        sm_without = build_month_summary(_user(), 2026, 5, [], [], today=date(2026, 5, 31))
+        sat = next(d for d in sm.days if d.date == date(2026, 5, 9))
+        assert sat.kind == "work"
+        assert sat.target == 0.0
+        assert sat.diff == pytest.approx(4.0)
+        assert "Überstunden" in sat.note
+        # Monatssoll unverändert (Wochenstunden bleiben auf Mo-Fr verteilt).
+        assert sm.target_hours == sm_without.target_hours
+        assert sm.saldo == pytest.approx(sm_without.saldo + 4.0)
+
+    def test_weekend_work_break_rule_applies(self):
+        wds = [_wd(date(2026, 5, 10), time(8, 0), time(15, 0))]  # So, 7h
+        sm = build_month_summary(_user(), 2026, 5, wds, [], today=date(2026, 5, 31))
+        sun = next(d for d in sm.days if d.date == date(2026, 5, 10))
+        assert sun.net == pytest.approx(6.5)
+        assert sun.diff == pytest.approx(6.5)
+
     def test_non_work_days_have_no_start_end(self):
         absences = [_abs(date(2026, 5, 11), "vacation")]
         sm = build_month_summary(_user(), 2026, 5, [], absences, today=date(2026, 5, 11))
@@ -436,6 +457,16 @@ class TestBuildYearSummaryWindows:
         ys = build_year_summary(_user(), 2026, wds, [], today=date(2026, 1, 1))
         assert ys.worked_days == 1
         assert ys.actual_hours == pytest.approx(8.0)
+
+
+class TestBuildYearSummaryWeekend:
+    def test_weekend_work_adds_overtime_without_target(self):
+        wds = [_wd(date(2026, 5, 9), time(9, 0), time(13, 0))]
+        with_wd = build_year_summary(_user(), 2026, wds, [], today=date(2026, 12, 31))
+        without = build_year_summary(_user(), 2026, [], [], today=date(2026, 12, 31))
+        assert with_wd.target_hours == without.target_hours
+        assert with_wd.saldo == pytest.approx(without.saldo + 4.0)
+        assert with_wd.worked_days == 1
 
 
 class TestBuildYearSummary:

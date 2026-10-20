@@ -154,6 +154,28 @@ class TestBulkAbsence:
             assert a.kind == Absence.KIND_SICK
 
 
+class TestBulkWeekend:
+    def test_work_on_weekend_saved(self, client, login_alice, app):
+        _bulk_post(client, login_alice, "2026-05-08, 2026-05-09, 2026-05-10")
+        with app.app_context():
+            assert WorkDay.query.count() == 3
+
+    def test_vacation_skips_weekend_days(self, client, login_alice, app):
+        r = _bulk_post(client, login_alice, "2026-05-08, 2026-05-09, 2026-05-10, 2026-05-11", kind="vacation")
+        assert r.status_code == 302
+        with app.app_context():
+            assert sorted(a.date for a in Absence.query.all()) == [date(2026, 5, 8), date(2026, 5, 11)]
+        page = client.get(r.headers["Location"]).data.decode()
+        assert "2 Wochenendtag(e) übersprungen" in page
+
+    def test_vacation_only_weekend_rejected(self, client, login_alice, app):
+        r = _bulk_post(client, login_alice, "2026-05-09, 2026-05-10", kind="vacation")
+        assert r.status_code == 200
+        assert "nur an Werktagen".encode() in r.data
+        with app.app_context():
+            assert Absence.query.count() == 0
+
+
 class TestBulkValidation:
     def test_invalid_date_in_list_stays_on_form(self, client, login_alice, app):
         r = _bulk_post(client, login_alice, "2026-05-12, kein-datum")

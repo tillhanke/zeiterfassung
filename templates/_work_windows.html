@@ -68,6 +68,16 @@
     const diffText   = document.getElementById('diffText');
 
     const dailyTarget = {{ user.daily_target }};
+    // Nur im Einzeleintrag vorhanden: am Wochenende ist das Soll 0, die
+    // Arbeitszeit zählt dann komplett als Überstunden.
+    const dateEl = form.querySelector('input[name="date"]');
+
+    function isWeekend() {
+      if (!dateEl || !dateEl.value) return false;
+      const [y, m, d] = dateEl.value.split('-').map(Number);
+      const wd = new Date(y, m - 1, d).getDay();
+      return wd === 0 || wd === 6;
+    }
 
     function legalBreak(g) {
       if (g > 9) return 0.75;
@@ -129,6 +139,10 @@
       grossText.textContent = 'Brutto ' + fmt(gross);
       breakText.textContent = 'Pause ' + (br * 60).toFixed(0) + ' min';
       netText.textContent = 'Netto ' + fmt(net);
+      if (isWeekend()) {
+        diffText.textContent = '(+' + net.toFixed(2) + ' h Überstunden – Wochenende)';
+        return;
+      }
       const diff = net - dailyTarget;
       diffText.textContent = '(' + (diff >= 0 ? '+' : '') + diff.toFixed(2) + ' h ggü. Soll/Tag)';
     }
@@ -152,6 +166,7 @@
     });
 
     rowsBox.addEventListener('change', update);
+    if (dateEl) dateEl.addEventListener('change', update);
     form.querySelectorAll('input[name="kind"]').forEach(r => r.addEventListener('change', update));
     update();
   })();

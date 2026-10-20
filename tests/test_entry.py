@@ -301,3 +301,22 @@ class TestEntryHourMinuteSelects:
         r = self._post(client, login_alice, start_hour="08", start_minute="00", end_hour="", end_minute="30")
         assert r.status_code == 200
         assert _windows(app, login_alice) == []
+
+
+class TestWeekend:
+    def test_work_on_saturday_allowed(self, client, login_alice, app):
+        r = _post_entry(client, login_alice, date="2026-05-09")
+        assert r.status_code == 302
+        assert _windows(app, login_alice) == [(time(9, 0), time(17, 30))]
+
+    def test_vacation_on_weekend_rejected(self, client, login_alice, app):
+        r = _post_entry(client, login_alice, date="2026-05-10", kind="vacation")
+        assert r.status_code == 200
+        assert b"nur an Werktagen" in r.data
+        with app.app_context():
+            assert Absence.query.count() == 0
+
+    def test_sick_on_weekend_keeps_existing_work(self, client, login_alice, app, make_workday):
+        make_workday(login_alice, date(2026, 5, 9), time(9, 0), time(12, 0))
+        _post_entry(client, login_alice, date="2026-05-09", kind="sick")
+        assert _windows(app, login_alice) == [(time(9, 0), time(12, 0))]

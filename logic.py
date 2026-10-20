@@ -169,6 +169,8 @@ class DaySummary:
     date: date
     weekday: int  # 0=Mo
     # 'work' | 'vacation' | 'sick' | 'holiday' | 'empty' | 'weekend' | 'future'
+    # Arbeit am Wochenende ist 'work' mit target=0, zählt also komplett als
+    # Überstunden; das Wochensoll bleibt auf Mo-Fr verteilt.
     # 'future' = leerer Mo-Fr-Tag in der Zukunft (zählt nicht ins Soll, damit
     # er keinen künstlichen Minus-Saldo erzeugt).
     kind: str
@@ -267,7 +269,12 @@ def build_month_summary(
                 if br > 0
                 else "keine gesetzl. Pause nötig"
             )
-            note = f"{base_note} · Feiertag: {hname}" if is_holi else base_note
+            if is_holi:
+                note = f"{base_note} · Feiertag: {hname}"
+            elif not is_weekday:
+                note = f"{base_note} · Wochenende: zählt als Überstunden"
+            else:
+                note = base_note
             days.append(
                 DaySummary(
                     d, d.weekday(), "work", g, n, target, note, windows=windows,

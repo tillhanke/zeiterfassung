@@ -64,6 +64,18 @@ class TestDashboardContent:
         for t in (b"08:00", b"12:00", b"13:00", b"17:15"):
             assert t in r.data
 
+    def test_weekend_rows_offer_entry_link(self, client, login_alice):
+        r = client.get(f"/user/{login_alice}?year=2026&month=5")
+        assert f"/user/{login_alice}/entry?date=2026-05-09".encode() in r.data  # Sa
+        assert f"/user/{login_alice}/entry?date=2026-05-10".encode() in r.data  # So
+        assert f"/user/{login_alice}/entry?date=2026-05-01".encode() not in r.data  # Feiertag
+
+    def test_weekend_work_shown_as_overtime(self, client, login_alice, make_workday):
+        make_workday(login_alice, date(2026, 5, 9), time(9, 0), time(13, 0))
+        r = client.get(f"/user/{login_alice}?year=2026&month=5")
+        assert "Wochenende: zählt als Überstunden".encode() in r.data
+        assert b"+4.00" in r.data
+
     def test_table_no_longer_shows_brutto_netto_soll_columns(self, client, login_alice):
         r = client.get(f"/user/{login_alice}?year=2026&month=5")
         # Spaltenüberschriften "Brutto"/"Netto"/"Soll" in der Tagestabelle sind weg.

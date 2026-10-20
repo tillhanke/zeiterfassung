@@ -350,6 +350,12 @@ def register_routes(app: Flask) -> None:
                 flash(f"Arbeitszeit für {entry_date.isoformat()} gespeichert.", "success")
 
             elif kind in (Absence.KIND_VACATION, Absence.KIND_SICK):
+                if entry_date.weekday() >= 5:
+                    flash(
+                        "Urlaub/Krank kann nur an Werktagen (Mo–Fr) eingetragen werden.",
+                        "danger",
+                    )
+                    return render_form()
                 WorkDay.query.filter_by(user_id=user.id, date=entry_date).delete()
                 if existing_abs:
                     existing_abs.kind = kind
@@ -444,7 +450,16 @@ def register_routes(app: Flask) -> None:
                 )
 
             elif kind in (Absence.KIND_VACATION, Absence.KIND_SICK):
-                for d in unique_dates:
+                # Urlaub/Krank gibt es nur an Werktagen; Wochenendtage überspringen.
+                absence_dates = [d for d in unique_dates if d.weekday() < 5]
+                skipped = len(unique_dates) - len(absence_dates)
+                if not absence_dates:
+                    flash(
+                        "Urlaub/Krank kann nur an Werktagen (Mo–Fr) eingetragen werden.",
+                        "danger",
+                    )
+                    return render_form()
+                for d in absence_dates:
                     WorkDay.query.filter_by(user_id=user.id, date=d).delete()
                     existing_abs = Absence.query.filter_by(
                         user_id=user.id, date=d
@@ -458,9 +473,11 @@ def register_routes(app: Flask) -> None:
                 db.session.commit()
                 label = "Urlaub" if kind == Absence.KIND_VACATION else "Krankheit"
                 flash(
-                    f"{label} für {len(unique_dates)} Tag(e) gespeichert.",
+                    f"{label} für {len(absence_dates)} Tag(e) gespeichert.",
                     "success",
                 )
+                if skipped:
+                    flash(f"{skipped} Wochenendtag(e) übersprungen.", "info")
             else:
                 flash("Unbekannter Eintragstyp.", "danger")
                 return render_form()
