@@ -1,0 +1,126 @@
+{# Zeitfenster-Eingabe für Arbeitstage (genutzt von entry_form und bulk_entry_form).
+   Erwartet: windows (Liste von (start, end)-Strings), user. Muss innerhalb eines
+   <form> stehen, das Radio-Buttons name="kind" enthält. #}
+<div id="workFields">
+  {% if windows_label %}<label class="form-label fw-semibold">{{ windows_label }}</label>{% endif %}
+  <div id="windowRows">
+    {% for start, end in windows %}
+      <div class="row g-2 align-items-end mb-2 window-row">
+        <div class="col">
+          <label class="form-label small mb-1">Startzeit</label>
+          <input type="time" name="start_time" class="form-control start-time" value="{{ start }}" />
+        </div>
+        <div class="col">
+          <label class="form-label small mb-1">Endzeit</label>
+          <input type="time" name="end_time" class="form-control end-time" value="{{ end }}" />
+        </div>
+        <div class="col-auto">
+          <button type="button" class="btn btn-outline-danger remove-window" aria-label="Zeitfenster entfernen">×</button>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  <button type="button" class="btn btn-outline-secondary btn-sm" id="addWindowBtn">+ Zeitfenster</button>
+  <div class="form-text">
+    Die gesetzliche Pause wird je Zeitfenster abgezogen – nur wenn ein einzelnes
+    Fenster länger als 6 h (30 min) bzw. 9 h (45 min) ist.
+  </div>
+  <div class="alert alert-info mt-3 mb-0" id="livePreview">
+    <span id="grossText">–</span>
+    <span class="mx-1">·</span>
+    <span id="breakText">–</span>
+    <span class="mx-1">·</span>
+    <strong id="netText">–</strong>
+    <span class="mx-1">·</span>
+    <span id="diffText" class="text-muted"></span>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const workFields = document.getElementById('workFields');
+    const form       = workFields.closest('form');
+    const rowsBox    = document.getElementById('windowRows');
+    const addBtn     = document.getElementById('addWindowBtn');
+    const grossText  = document.getElementById('grossText');
+    const breakText  = document.getElementById('breakText');
+    const netText    = document.getElementById('netText');
+    const diffText   = document.getElementById('diffText');
+
+    const dailyTarget = {{ user.daily_target }};
+
+    function legalBreak(g) {
+      if (g > 9) return 0.75;
+      if (g > 6) return 0.5;
+      return 0;
+    }
+    function fmt(n) { return n.toFixed(2) + ' h'; }
+    function minutes(v) { const [h, m] = v.split(':').map(Number); return h * 60 + m; }
+
+    function showError(msg) {
+      grossText.textContent = msg;
+      breakText.textContent = '–';
+      netText.textContent = '–';
+      diffText.textContent = '';
+    }
+
+    function update() {
+      const kind = form.querySelector('input[name="kind"]:checked').value;
+      workFields.style.display = (kind === 'work') ? '' : 'none';
+      if (kind !== 'work') return;
+
+      const rows = rowsBox.querySelectorAll('.window-row');
+      rows.forEach(r => { r.querySelector('.remove-window').disabled = rows.length === 1; });
+
+      const windows = [];
+      for (const r of rows) {
+        const s = r.querySelector('.start-time').value, e = r.querySelector('.end-time').value;
+        if (!s && !e) continue;
+        if (!s || !e) return showError('–');
+        const a = minutes(s), b = minutes(e);
+        if (b <= a) return showError('Endzeit muss nach Startzeit liegen');
+        windows.push([a, b]);
+      }
+      if (windows.length === 0) return showError('–');
+      windows.sort((x, y) => x[0] - y[0]);
+      for (let i = 1; i < windows.length; i++) {
+        if (windows[i][0] < windows[i - 1][1]) return showError('Zeitfenster überschneiden sich');
+      }
+
+      let gross = 0, br = 0;
+      for (const [a, b] of windows) {
+        const g = (b - a) / 60;
+        gross += g;
+        br += legalBreak(g);
+      }
+      const net = gross - br;
+      grossText.textContent = 'Brutto ' + fmt(gross);
+      breakText.textContent = 'Pause ' + (br * 60).toFixed(0) + ' min';
+      netText.textContent = 'Netto ' + fmt(net);
+      const diff = net - dailyTarget;
+      diffText.textContent = '(' + (diff >= 0 ? '+' : '') + diff.toFixed(2) + ' h ggü. Soll/Tag)';
+    }
+
+    addBtn.addEventListener('click', () => {
+      const rows = rowsBox.querySelectorAll('.window-row');
+      const row = rows[rows.length - 1].cloneNode(true);
+      // Neues Fenster beginnt dort, wo das letzte endet.
+      const lastEnd = rows[rows.length - 1].querySelector('.end-time').value;
+      row.querySelector('.start-time').value = lastEnd;
+      row.querySelector('.end-time').value = '';
+      rowsBox.appendChild(row);
+      update();
+    });
+
+    rowsBox.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('.remove-window');
+      if (!btn || rowsBox.querySelectorAll('.window-row').length === 1) return;
+      btn.closest('.window-row').remove();
+      update();
+    });
+
+    rowsBox.addEventListener('input', update);
+    form.querySelectorAll('input[name="kind"]').forEach(r => r.addEventListener('change', update));
+    update();
+  })();
+</script>

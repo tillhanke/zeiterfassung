@@ -15,6 +15,7 @@ from functools import wraps
 from typing import Optional
 
 import click
+from sqlalchemy import text
 from flask import (
     Flask,
     abort,
@@ -125,6 +126,57 @@ def register_context(app: Flask) -> None:
             "active_user": current_user(),
             "today": date.today(),
         }
+
+
+# ---------------------------------------------------------------------------
+# Zeitfenster-Formularfelder
+# ---------------------------------------------------------------------------
+
+
+def parse_windows(form) -> tuple[list[logic.Window], list[tuple[str, str]], Optional[str]]:
+    """Liest die Zeitfenster aus den Feldern start_time/end_time (mehrfach).
+
+    Komplett leere Zeilen werden ignoriert. Gibt (Fenster, Rohwerte, Fehler)
+    zurück; die Rohwerte dienen dazu, das Formular nach einem Fehler mit den
+    Eingaben der Nutzerin erneut anzuzeigen.
+    """
+    starts = form.getlist("start_time")
+    ends = form.getlist("end_time")
+    raw: list[tuple[str, str]] = []
+    windows: list[logic.Window] = []
+    for start_str, end_str in zip(starts, ends):
+        start_str, end_str = start_str.strip(), end_str.strip()
+        if not start_str and not end_str:
+            continue
+        raw.append((start_str, end_str))
+        try:
+            windows.append(
+                (
+                    datetime.strptime(start_str, "%H:%M").time(),
+                    datetime.strptime(end_str, "%H:%M").time(),
+                )
+            )
+        except ValueError:
+            return [], raw, "Bitte gültige Start- und Endzeit angeben."
+    if not windows:
+        return [], raw, "Bitte gültige Start- und Endzeit angeben."
+    error = logic.validate_windows(windows)
+    if error:
+        return [], raw, error
+    return sorted(windows), raw, None
+
+
+def replace_windows(user_id: int, d: date, windows: list[logic.Window]) -> None:
+    """Ersetzt alle Zeitfenster (und eine evtl. Abwesenheit) eines Tages."""
+    Absence.query.filter_by(user_id=user_id, date=d).delete()
+    WorkDay.query.filter_by(user_id=user_id, date=d).delete()
+    for start_t, end_t in windows:
+        db.session.add(
+            WorkDay(user_id=user_id, date=d, start_time=start_t, end_time=end_t)
+        )
+
+
+DEFAULT_WINDOWS = [("09:00", "17:30")]
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +307,14 @@ def register_routes(app: Flask) -> None:
         user = _ensure_self(user_id)
         prefill_date = request.args.get("date") or request.form.get("date")
 
+        def render_form(windows=None):
+            return render_template(
+                "entry_form.html",
+                user=user,
+                prefill_date=prefill_date,
+                windows=windows or DEFAULT_WINDOWS,
+            )
+
         if request.method == "POST":
             kind = request.form.get("kind", "work")
             date_str = request.form.get("date", "").strip()
@@ -262,54 +322,24 @@ def register_routes(app: Flask) -> None:
                 entry_date = datetime.strptime(date_str, "%Y-%m-%d").date()
             except ValueError:
                 flash("Ungültiges Datum.", "danger")
-                return render_template(
-                    "entry_form.html", user=user, prefill_date=prefill_date
-                )
+                return render_form()
 
-            existing_wd = WorkDay.query.filter_by(
-                user_id=user.id, date=entry_date
-            ).first()
             existing_abs = Absence.query.filter_by(
                 user_id=user.id, date=entry_date
             ).first()
 
             if kind == "work":
-                start_str = request.form.get("start_time", "").strip()
-                end_str = request.form.get("end_time", "").strip()
-                try:
-                    start_t = datetime.strptime(start_str, "%H:%M").time()
-                    end_t = datetime.strptime(end_str, "%H:%M").time()
-                except ValueError:
-                    flash("Bitte gültige Start- und Endzeit angeben.", "danger")
-                    return render_template(
-                        "entry_form.html", user=user, prefill_date=prefill_date
-                    )
-                if end_t <= start_t:
-                    flash("Endzeit muss nach Startzeit liegen.", "danger")
-                    return render_template(
-                        "entry_form.html", user=user, prefill_date=prefill_date
-                    )
+                windows, raw, error = parse_windows(request.form)
+                if error:
+                    flash(error, "danger")
+                    return render_form(raw)
 
-                if existing_abs:
-                    db.session.delete(existing_abs)
-                if existing_wd:
-                    existing_wd.start_time = start_t
-                    existing_wd.end_time = end_t
-                else:
-                    db.session.add(
-                        WorkDay(
-                            user_id=user.id,
-                            date=entry_date,
-                            start_time=start_t,
-                            end_time=end_t,
-                        )
-                    )
+                replace_windows(user.id, entry_date, windows)
                 db.session.commit()
                 flash(f"Arbeitszeit für {entry_date.isoformat()} gespeichert.", "success")
 
             elif kind in (Absence.KIND_VACATION, Absence.KIND_SICK):
-                if existing_wd:
-                    db.session.delete(existing_wd)
+                WorkDay.query.filter_by(user_id=user.id, date=entry_date).delete()
                 if existing_abs:
                     existing_abs.kind = kind
                 else:
@@ -323,9 +353,7 @@ def register_routes(app: Flask) -> None:
                 )
             else:
                 flash("Unbekannter Eintragstyp.", "danger")
-                return render_template(
-                    "entry_form.html", user=user, prefill_date=prefill_date
-                )
+                return render_form()
 
             return redirect(
                 url_for(
@@ -336,7 +364,21 @@ def register_routes(app: Flask) -> None:
                 )
             )
 
-        return render_template("entry_form.html", user=user, prefill_date=prefill_date)
+        # Beim Bearbeiten eines Tages die vorhandenen Zeitfenster vorbelegen.
+        existing: list[tuple[str, str]] = []
+        if prefill_date:
+            try:
+                d = datetime.strptime(prefill_date, "%Y-%m-%d").date()
+            except ValueError:
+                d = None
+            if d:
+                existing = [
+                    (w.start_time.strftime("%H:%M"), w.end_time.strftime("%H:%M"))
+                    for w in WorkDay.query.filter_by(user_id=user.id, date=d)
+                    .order_by(WorkDay.start_time)
+                    .all()
+                ]
+        return render_form(existing)
 
     @app.route("/user/<int:user_id>/bulk-entry", methods=["GET", "POST"])
     def bulk_entry_form(user_id: int):
@@ -350,6 +392,14 @@ def register_routes(app: Flask) -> None:
             for d, name in logic.holidays_sachsen_anhalt(y).items():
                 holidays_map[d.isoformat()] = name
 
+        def render_form(windows=None):
+            return render_template(
+                "bulk_entry_form.html",
+                user=user,
+                holidays_json=json.dumps(holidays_map),
+                windows=windows or DEFAULT_WINDOWS,
+            )
+
         if request.method == "POST":
             kind = request.form.get("kind", "work")
             dates_raw = request.form.get("dates", "")
@@ -361,63 +411,21 @@ def register_routes(app: Flask) -> None:
                     parsed_dates.append(datetime.strptime(s, "%Y-%m-%d").date())
                 except ValueError:
                     flash(f"Ungültiges Datum: {s}", "danger")
-                    return render_template(
-                        "bulk_entry_form.html",
-                        user=user,
-                        holidays_json=json.dumps(holidays_map),
-                    )
+                    return render_form()
 
             unique_dates = sorted(set(parsed_dates))
             if not unique_dates:
                 flash("Bitte mindestens ein Datum auswählen.", "danger")
-                return render_template(
-                    "bulk_entry_form.html",
-                    user=user,
-                    holidays_json=json.dumps(holidays_map),
-                )
+                return render_form()
 
             if kind == "work":
-                start_str = request.form.get("start_time", "").strip()
-                end_str = request.form.get("end_time", "").strip()
-                try:
-                    start_t = datetime.strptime(start_str, "%H:%M").time()
-                    end_t = datetime.strptime(end_str, "%H:%M").time()
-                except ValueError:
-                    flash("Bitte gültige Start- und Endzeit angeben.", "danger")
-                    return render_template(
-                        "bulk_entry_form.html",
-                        user=user,
-                        holidays_json=json.dumps(holidays_map),
-                    )
-                if end_t <= start_t:
-                    flash("Endzeit muss nach Startzeit liegen.", "danger")
-                    return render_template(
-                        "bulk_entry_form.html",
-                        user=user,
-                        holidays_json=json.dumps(holidays_map),
-                    )
+                windows, raw, error = parse_windows(request.form)
+                if error:
+                    flash(error, "danger")
+                    return render_form(raw)
 
                 for d in unique_dates:
-                    existing_abs = Absence.query.filter_by(
-                        user_id=user.id, date=d
-                    ).first()
-                    if existing_abs:
-                        db.session.delete(existing_abs)
-                    existing_wd = WorkDay.query.filter_by(
-                        user_id=user.id, date=d
-                    ).first()
-                    if existing_wd:
-                        existing_wd.start_time = start_t
-                        existing_wd.end_time = end_t
-                    else:
-                        db.session.add(
-                            WorkDay(
-                                user_id=user.id,
-                                date=d,
-                                start_time=start_t,
-                                end_time=end_t,
-                            )
-                        )
+                    replace_windows(user.id, d, windows)
                 db.session.commit()
                 flash(
                     f"Arbeitszeit für {len(unique_dates)} Tag(e) gespeichert.",
@@ -426,11 +434,7 @@ def register_routes(app: Flask) -> None:
 
             elif kind in (Absence.KIND_VACATION, Absence.KIND_SICK):
                 for d in unique_dates:
-                    existing_wd = WorkDay.query.filter_by(
-                        user_id=user.id, date=d
-                    ).first()
-                    if existing_wd:
-                        db.session.delete(existing_wd)
+                    WorkDay.query.filter_by(user_id=user.id, date=d).delete()
                     existing_abs = Absence.query.filter_by(
                         user_id=user.id, date=d
                     ).first()
@@ -448,11 +452,7 @@ def register_routes(app: Flask) -> None:
                 )
             else:
                 flash("Unbekannter Eintragstyp.", "danger")
-                return render_template(
-                    "bulk_entry_form.html",
-                    user=user,
-                    holidays_json=json.dumps(holidays_map),
-                )
+                return render_form()
 
             first = unique_dates[0]
             return redirect(
@@ -464,11 +464,7 @@ def register_routes(app: Flask) -> None:
                 )
             )
 
-        return render_template(
-            "bulk_entry_form.html",
-            user=user,
-            holidays_json=json.dumps(holidays_map),
-        )
+        return render_form()
 
     @app.post("/user/<int:user_id>/day/<iso_date>/delete")
     def delete_day(user_id: int, iso_date: str):
@@ -604,6 +600,38 @@ def anonymize_user_names(prefix: str = "Nutzerin") -> int:
 
 
 # ---------------------------------------------------------------------------
+# Schema-Migration
+# ---------------------------------------------------------------------------
+
+
+def migrate_workdays_allow_multiple_windows() -> bool:
+    """Entfernt den alten UNIQUE(user_id, date)-Constraint aus `workdays`.
+
+    Ältere Datenbanken erlauben nur ein Zeitfenster pro Tag. SQLite kann
+    Constraints nicht per ALTER TABLE entfernen, daher wird die Tabelle neu
+    aufgebaut und die Daten werden übernommen. Idempotent; gibt True zurück,
+    wenn migriert wurde.
+    """
+    ddl = db.session.execute(
+        text("SELECT sql FROM sqlite_master WHERE type='table' AND name='workdays'")
+    ).scalar()
+    if not ddl or "uq_workday_user_date" not in ddl:
+        return False
+    db.session.execute(text("ALTER TABLE workdays RENAME TO workdays_old"))
+    db.session.commit()
+    WorkDay.__table__.create(db.engine)
+    db.session.execute(
+        text(
+            "INSERT INTO workdays (id, user_id, date, start_time, end_time) "
+            "SELECT id, user_id, date, start_time, end_time FROM workdays_old"
+        )
+    )
+    db.session.execute(text("DROP TABLE workdays_old"))
+    db.session.commit()
+    return True
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -613,6 +641,8 @@ def register_cli(app: Flask) -> None:
     def init_db_cmd():
         """Legt die Datenbank-Tabellen an (ohne Daten anzulegen)."""
         with app.app_context():
+            if migrate_workdays_allow_multiple_windows():
+                print("Tabelle workdays migriert (mehrere Zeitfenster pro Tag).")
             db.create_all()
             print("Datenbank initialisiert.")
 

@@ -18,6 +18,53 @@ class TestInitDb:
         assert result.exit_code == 0
 
 
+class TestMigrateWorkdays:
+    OLD_DDL = (
+        "CREATE TABLE workdays ("
+        "id INTEGER NOT NULL, user_id INTEGER NOT NULL, date DATE NOT NULL, "
+        "start_time TIME NOT NULL, end_time TIME NOT NULL, PRIMARY KEY (id), "
+        "CONSTRAINT uq_workday_user_date UNIQUE (user_id, date), "
+        "FOREIGN KEY(user_id) REFERENCES users (id))"
+    )
+
+    def test_old_schema_is_migrated_and_data_kept(self, app, runner):
+        from sqlalchemy import text
+
+        with app.app_context():
+            db.session.execute(text("DROP TABLE workdays"))
+            db.session.execute(text(self.OLD_DDL))
+            u = User(name="Alt", weekly_hours=40)
+            db.session.add(u)
+            db.session.commit()
+            db.session.execute(
+                text(
+                    "INSERT INTO workdays (id, user_id, date, start_time, end_time) "
+                    "VALUES (7, :uid, '2026-05-11', '09:00:00.000000', '17:00:00.000000')"
+                ),
+                {"uid": u.id},
+            )
+            db.session.commit()
+            uid = u.id
+
+        result = runner.invoke(args=["init-db"])
+        assert result.exit_code == 0
+        assert "migriert" in result.output
+
+        with app.app_context():
+            wd = db.session.get(WorkDay, 7)
+            assert (wd.user_id, wd.date, wd.start_time) == (uid, date(2026, 5, 11), time(9, 0))
+            # Zweites Fenster am selben Tag ist jetzt möglich.
+            db.session.add(
+                WorkDay(user_id=uid, date=date(2026, 5, 11), start_time=time(18, 0), end_time=time(19, 0))
+            )
+            db.session.commit()
+            assert WorkDay.query.count() == 2
+
+        # Zweiter Lauf: nichts mehr zu migrieren.
+        result = runner.invoke(args=["init-db"])
+        assert "migriert" not in result.output
+
+
 class TestResetDb:
     def test_clears_all_data(self, app, runner):
         with app.app_context():

@@ -23,6 +23,9 @@ from logic import (
     legal_break,
     net_hours,
     shift_month,
+    validate_windows,
+    windows_break_hours,
+    windows_net_hours,
     working_days_in_month,
     workday_net_hours,
 )
@@ -102,6 +105,44 @@ class TestWorkdayNetHours:
 # ---------------------------------------------------------------------------
 # Werktage / Feiertage
 # ---------------------------------------------------------------------------
+
+
+class TestWindows:
+    def test_two_short_windows_no_break(self):
+        # 2x4h = 8h brutto, aber kein einzelnes Fenster > 6h -> keine Pause.
+        windows = [(time(8, 0), time(12, 0)), (time(13, 0), time(17, 0))]
+        assert windows_break_hours(windows) == 0.0
+        assert windows_net_hours(windows) == 8.0
+
+    def test_break_only_on_long_window(self):
+        # 7h-Fenster -> 30 min, 2h-Fenster -> 0.
+        windows = [(time(7, 0), time(14, 0)), (time(15, 0), time(17, 0))]
+        assert windows_break_hours(windows) == 0.5
+        assert windows_net_hours(windows) == pytest.approx(8.5)
+
+    def test_break_summed_over_windows(self):
+        windows = [(time(0, 0), time(6, 30)), (time(7, 0), time(16, 30))]
+        # 6.5h -> 30 min, 9.5h -> 45 min
+        assert windows_break_hours(windows) == pytest.approx(1.25)
+
+    def test_single_window_matches_net_hours(self):
+        assert windows_net_hours([(time(9, 0), time(17, 30))]) == net_hours(8.5)
+
+    def test_validate_ok(self):
+        assert validate_windows([(time(8, 0), time(12, 0)), (time(13, 0), time(17, 0))]) is None
+
+    def test_validate_touching_windows_ok(self):
+        assert validate_windows([(time(8, 0), time(12, 0)), (time(12, 0), time(17, 0))]) is None
+
+    def test_validate_overlap(self):
+        err = validate_windows([(time(13, 0), time(17, 0)), (time(8, 0), time(13, 30))])
+        assert "überschneiden" in err
+
+    def test_validate_end_before_start(self):
+        assert "nach Startzeit" in validate_windows([(time(12, 0), time(8, 0))])
+
+    def test_validate_empty(self):
+        assert validate_windows([]) is not None
 
 
 class TestWorkingDaysInMonth:
@@ -310,6 +351,32 @@ class TestBuildMonthSummary:
         assert wday.start == time(8, 15)
         assert wday.end == time(16, 45)
 
+    def test_multiple_windows_aggregated_per_day(self):
+        wds = [
+            _wd(date(2026, 5, 11), time(13, 0), time(17, 0)),
+            _wd(date(2026, 5, 11), time(8, 0), time(12, 0)),
+        ]
+        sm = build_month_summary(_user(), 2026, 5, wds, [], today=date(2026, 5, 11))
+        wday = next(d for d in sm.days if d.date == date(2026, 5, 11))
+        assert wday.kind == "work"
+        assert wday.windows == [(time(8, 0), time(12, 0)), (time(13, 0), time(17, 0))]
+        assert wday.start == time(8, 0)
+        assert wday.end == time(17, 0)
+        assert wday.gross == 8.0
+        assert wday.net == 8.0  # keine Pause, da kein Fenster > 6h
+        assert "keine gesetzl. Pause" in wday.note
+        assert sm.worked_days == 1
+
+    def test_multiple_windows_break_note(self):
+        wds = [
+            _wd(date(2026, 5, 11), time(7, 0), time(14, 0)),
+            _wd(date(2026, 5, 11), time(15, 0), time(17, 0)),
+        ]
+        sm = build_month_summary(_user(), 2026, 5, wds, [], today=date(2026, 5, 11))
+        wday = next(d for d in sm.days if d.date == date(2026, 5, 11))
+        assert wday.net == pytest.approx(8.5)
+        assert "Pause 30 min" in wday.note
+
     def test_non_work_days_have_no_start_end(self):
         absences = [_abs(date(2026, 5, 11), "vacation")]
         sm = build_month_summary(_user(), 2026, 5, [], absences, today=date(2026, 5, 11))
@@ -358,6 +425,17 @@ class TestBuildMonthSummary:
 # ---------------------------------------------------------------------------
 # Jahres-Übersicht
 # ---------------------------------------------------------------------------
+
+
+class TestBuildYearSummaryWindows:
+    def test_multiple_windows_count_as_one_worked_day(self):
+        wds = [
+            _wd(date(2026, 5, 11), time(8, 0), time(12, 0)),
+            _wd(date(2026, 5, 11), time(13, 0), time(17, 0)),
+        ]
+        ys = build_year_summary(_user(), 2026, wds, [], today=date(2026, 1, 1))
+        assert ys.worked_days == 1
+        assert ys.actual_hours == pytest.approx(8.0)
 
 
 class TestBuildYearSummary:

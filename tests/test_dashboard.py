@@ -57,6 +57,13 @@ class TestDashboardContent:
         assert b"08:15" in r.data
         assert b"16:45" in r.data
 
+    def test_multiple_windows_shown(self, client, login_alice, make_workday):
+        make_workday(login_alice, date(2026, 5, 11), time(8, 0), time(12, 0))
+        make_workday(login_alice, date(2026, 5, 11), time(13, 0), time(17, 15))
+        r = client.get(f"/user/{login_alice}?year=2026&month=5")
+        for t in (b"08:00", b"12:00", b"13:00", b"17:15"):
+            assert t in r.data
+
     def test_table_no_longer_shows_brutto_netto_soll_columns(self, client, login_alice):
         r = client.get(f"/user/{login_alice}?year=2026&month=5")
         # Spaltenüberschriften "Brutto"/"Netto"/"Soll" in der Tagestabelle sind weg.

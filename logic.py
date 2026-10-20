@@ -3,7 +3,7 @@ und Monatsauswertung."""
 from __future__ import annotations
 
 import calendar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, time, timedelta
 from functools import lru_cache
 from typing import Iterable, Optional
@@ -45,6 +45,54 @@ def net_hours(gross: float) -> float:
 
 def workday_net_hours(wd: WorkDay) -> float:
     return net_hours(gross_hours(wd.start_time, wd.end_time))
+
+
+Window = tuple[time, time]
+
+
+def windows_gross_hours(windows: Iterable[Window]) -> float:
+    return sum(gross_hours(s, e) for s, e in windows)
+
+
+def windows_break_hours(windows: Iterable[Window]) -> float:
+    """Summe der Pausen über alle Zeitfenster eines Tages.
+
+    Die Pause wird je Fenster bestimmt: abgezogen wird nur, wenn ein einzelnes
+    Fenster die Schwelle (>6h bzw. >9h) überschreitet. Zwei Fenster à 4h
+    ergeben also keinen Abzug.
+    """
+    return sum(legal_break(gross_hours(s, e)) for s, e in windows)
+
+
+def windows_net_hours(windows: Iterable[Window]) -> float:
+    return sum(net_hours(gross_hours(s, e)) for s, e in windows)
+
+
+def validate_windows(windows: list[Window]) -> Optional[str]:
+    """Prüft Zeitfenster eines Tages; gibt eine Fehlermeldung oder None zurück.
+
+    Fenster dürfen sich berühren (12:00-12:00), aber nicht überlappen.
+    """
+    if not windows:
+        return "Bitte mindestens ein Zeitfenster angeben."
+    for s, e in windows:
+        if e <= s:
+            return "Endzeit muss nach Startzeit liegen."
+    ordered = sorted(windows)
+    for (_, prev_end), (next_start, _) in zip(ordered, ordered[1:]):
+        if next_start < prev_end:
+            return "Zeitfenster dürfen sich nicht überschneiden."
+    return None
+
+
+def group_windows_by_date(workdays: Iterable[WorkDay]) -> dict[date, list[Window]]:
+    """Fasst WorkDay-Zeilen pro Datum zu sortierten Zeitfenster-Listen zusammen."""
+    by_date: dict[date, list[Window]] = {}
+    for w in workdays:
+        by_date.setdefault(w.date, []).append((w.start_time, w.end_time))
+    for windows in by_date.values():
+        windows.sort()
+    return by_date
 
 
 def working_days_in_month(year: int, month: int) -> list[date]:
@@ -128,8 +176,15 @@ class DaySummary:
     net: float
     target: float
     note: str = ""
-    start: Optional[time] = None
-    end: Optional[time] = None
+    windows: list[Window] = field(default_factory=list)
+
+    @property
+    def start(self) -> Optional[time]:
+        return self.windows[0][0] if self.windows else None
+
+    @property
+    def end(self) -> Optional[time]:
+        return self.windows[-1][1] if self.windows else None
 
     @property
     def diff(self) -> float:
@@ -185,7 +240,7 @@ def build_month_summary(
     if today is None:
         today = date.today()
     daily_target = user.daily_target
-    wd_by_date = {w.date: w for w in workdays}
+    wd_by_date = group_windows_by_date(workdays)
     abs_by_date = {a.date: a for a in absences}
 
     _, last = calendar.monthrange(year, month)
@@ -203,19 +258,19 @@ def build_month_summary(
         target = daily_target if (is_weekday and not is_holi) else 0.0
 
         if d in wd_by_date:
-            wd = wd_by_date[d]
-            g = gross_hours(wd.start_time, wd.end_time)
-            n = net_hours(g)
+            windows = wd_by_date[d]
+            g = windows_gross_hours(windows)
+            n = windows_net_hours(windows)
+            br = windows_break_hours(windows)
             base_note = (
-                f"Pause {legal_break(g) * 60:.0f} min abgezogen"
-                if legal_break(g) > 0
+                f"Pause {br * 60:.0f} min abgezogen"
+                if br > 0
                 else "keine gesetzl. Pause nötig"
             )
             note = f"{base_note} · Feiertag: {hname}" if is_holi else base_note
             days.append(
                 DaySummary(
-                    d, d.weekday(), "work", g, n, target, note,
-                    start=wd.start_time, end=wd.end_time,
+                    d, d.weekday(), "work", g, n, target, note, windows=windows,
                 )
             )
             actual_total += n
@@ -295,14 +350,14 @@ def build_year_summary(
     Logik identisch zu build_month_summary:
     - Mo-Fr ohne Feiertag: target = daily_target
     - Wochenende oder Feiertag: target = 0
-    - Arbeitstag: actual += net_hours(gross)
+    - Arbeitstag: actual += Summe der Netto-Stunden aller Zeitfenster
     - Urlaub/Krank: actual += target (zählt als erfüllt)
     - Leerer Mo-Fr-Tag in der Zukunft (d > today): zählt nicht ins Soll.
     """
     if today is None:
         today = date.today()
     daily_target = user.daily_target
-    wd_by_date = {w.date: w for w in workdays}
+    wd_by_date = group_windows_by_date(workdays)
     abs_by_date = {a.date: a for a in absences}
 
     target_total = 0.0
@@ -321,8 +376,7 @@ def build_year_summary(
         target = daily_target if (is_weekday and not is_holi) else 0.0
 
         if d in wd_by_date:
-            wd = wd_by_date[d]
-            actual_total += net_hours(gross_hours(wd.start_time, wd.end_time))
+            actual_total += windows_net_hours(wd_by_date[d])
             target_total += target
             worked += 1
         elif is_holi:
@@ -361,6 +415,11 @@ assert net_hours(8.0) == 7.5
 assert net_hours(10.0) == 9.25
 assert net_hours(5.0) == 5.0
 assert gross_hours(time(9, 0), time(17, 0)) == 8.0
+# Pause je Zeitfenster: 2x4h -> kein Abzug, 7h + 2h -> 30 min nur auf das 7h-Fenster.
+assert windows_net_hours([(time(8, 0), time(12, 0)), (time(13, 0), time(17, 0))]) == 8.0
+assert windows_net_hours([(time(8, 0), time(15, 0)), (time(16, 0), time(18, 0))]) == 8.5
+assert validate_windows([(time(8, 0), time(12, 0)), (time(11, 0), time(14, 0))]) is not None
+assert validate_windows([(time(8, 0), time(12, 0)), (time(12, 0), time(14, 0))]) is None
 assert shift_month(2026, 1, -1) == (2025, 12)
 assert shift_month(2026, 12, 1) == (2027, 1)
 # Bekannte Ostersonntage zur Verifikation des Algorithmus.

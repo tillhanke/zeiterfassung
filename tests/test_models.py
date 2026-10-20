@@ -55,17 +55,15 @@ class TestWorkDay:
         db.session.commit()
         assert wd.id is not None
 
-    def test_unique_user_date(self, db):
+    def test_multiple_windows_per_day_allowed(self, db):
         u = User(name="A", weekly_hours=40)
         db.session.add(u)
         db.session.commit()
         d = date(2026, 5, 11)
-        db.session.add(WorkDay(user_id=u.id, date=d, start_time=time(9, 0), end_time=time(17, 0)))
+        db.session.add(WorkDay(user_id=u.id, date=d, start_time=time(8, 0), end_time=time(12, 0)))
+        db.session.add(WorkDay(user_id=u.id, date=d, start_time=time(13, 0), end_time=time(17, 0)))
         db.session.commit()
-        db.session.add(WorkDay(user_id=u.id, date=d, start_time=time(10, 0), end_time=time(18, 0)))
-        with pytest.raises(IntegrityError):
-            db.session.commit()
-        db.session.rollback()
+        assert WorkDay.query.filter_by(user_id=u.id, date=d).count() == 2
 
     def test_same_date_for_different_users_ok(self, db):
         a = User(name="A", weekly_hours=40)

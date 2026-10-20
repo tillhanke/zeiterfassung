@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date, time
 
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import Index, UniqueConstraint
 
 db = SQLAlchemy()
 
@@ -34,8 +34,11 @@ class User(db.Model):
 
 
 class WorkDay(db.Model):
+    """Ein Arbeitszeitfenster. Pro Tag sind mehrere Fenster möglich; die
+    gesetzliche Pause wird je Fenster separat bestimmt (siehe logic.py)."""
+
     __tablename__ = "workdays"
-    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_workday_user_date"),)
+    __table_args__ = (Index("ix_workdays_user_date", "user_id", "date"),)
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)

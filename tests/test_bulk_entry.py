@@ -77,6 +77,43 @@ class TestBulkWork:
             assert WorkDay.query.count() == 5
 
 
+class TestBulkMultipleWindows:
+    def test_two_windows_on_each_day(self, client, login_alice, app, make_workday):
+        make_workday(login_alice, date(2026, 5, 12), time(6, 0), time(7, 0))
+        r = client.post(
+            f"/user/{login_alice}/bulk-entry",
+            data={
+                "kind": "work",
+                "dates": "2026-05-12, 2026-05-13",
+                "start_time": ["13:00", "08:00"],
+                "end_time": ["17:00", "12:00"],
+            },
+        )
+        assert r.status_code == 302
+        with app.app_context():
+            for d in (date(2026, 5, 12), date(2026, 5, 13)):
+                wds = WorkDay.query.filter_by(date=d).order_by(WorkDay.start_time).all()
+                assert [(w.start_time, w.end_time) for w in wds] == [
+                    (time(8, 0), time(12, 0)),
+                    (time(13, 0), time(17, 0)),
+                ]
+
+    def test_overlap_rejected(self, client, login_alice, app):
+        r = client.post(
+            f"/user/{login_alice}/bulk-entry",
+            data={
+                "kind": "work",
+                "dates": "2026-05-12",
+                "start_time": ["08:00", "10:00"],
+                "end_time": ["12:00", "14:00"],
+            },
+        )
+        assert r.status_code == 200
+        assert "überschneiden".encode() in r.data
+        with app.app_context():
+            assert WorkDay.query.count() == 0
+
+
 class TestBulkAbsence:
     def test_vacation_multiple_days(self, client, login_alice, app):
         _bulk_post(client, login_alice, "2026-05-12, 2026-05-13, 2026-05-14", kind="vacation")

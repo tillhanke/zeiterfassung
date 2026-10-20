@@ -158,3 +158,80 @@ class TestDeleteDay:
         # Löschen eines nicht vorhandenen Eintrags ist erlaubt (kein Crash).
         r = client.post(f"/user/{login_alice}/day/2026-05-11/delete", follow_redirects=False)
         assert r.status_code == 302
+
+
+def _post_windows(client, user_id, windows, **overrides):
+    payload = {
+        "kind": "work",
+        "date": "2026-05-11",
+        "start_time": [s for s, _ in windows],
+        "end_time": [e for _, e in windows],
+    }
+    payload.update(overrides)
+    return client.post(f"/user/{user_id}/entry", data=payload, follow_redirects=False)
+
+
+def _windows(app, user_id):
+    with app.app_context():
+        return [
+            (w.start_time, w.end_time)
+            for w in WorkDay.query.filter_by(user_id=user_id).order_by(WorkDay.start_time)
+        ]
+
+
+class TestEntryMultipleWindows:
+    def test_creates_two_windows(self, client, login_alice, app):
+        r = _post_windows(client, login_alice, [("08:00", "12:00"), ("13:00", "17:00")])
+        assert r.status_code == 302
+        assert _windows(app, login_alice) == [
+            (time(8, 0), time(12, 0)),
+            (time(13, 0), time(17, 0)),
+        ]
+
+    def test_replaces_all_existing_windows(self, client, login_alice, app, make_workday):
+        make_workday(login_alice, date(2026, 5, 11), time(7, 0), time(9, 0))
+        make_workday(login_alice, date(2026, 5, 11), time(10, 0), time(12, 0))
+        _post_windows(client, login_alice, [("14:00", "18:00")])
+        assert _windows(app, login_alice) == [(time(14, 0), time(18, 0))]
+
+    def test_empty_rows_are_ignored(self, client, login_alice, app):
+        _post_windows(client, login_alice, [("08:00", "12:00"), ("", "")])
+        assert _windows(app, login_alice) == [(time(8, 0), time(12, 0))]
+
+    def test_overlap_rejected_and_input_kept(self, client, login_alice, app, make_workday):
+        make_workday(login_alice, date(2026, 5, 11), time(9, 0), time(17, 0))
+        r = _post_windows(client, login_alice, [("08:00", "12:00"), ("11:30", "17:00")])
+        assert r.status_code == 200
+        assert "überschneiden".encode() in r.data
+        assert b'value="11:30"' in r.data
+        # Bestehender Eintrag bleibt unverändert.
+        assert _windows(app, login_alice) == [(time(9, 0), time(17, 0))]
+
+    def test_one_invalid_window_rejects_all(self, client, login_alice, app):
+        r = _post_windows(client, login_alice, [("08:00", "12:00"), ("15:00", "14:00")])
+        assert r.status_code == 200
+        assert _windows(app, login_alice) == []
+
+    def test_get_prefills_existing_windows(self, client, login_alice, make_workday):
+        make_workday(login_alice, date(2026, 5, 11), time(13, 15), time(17, 0))
+        make_workday(login_alice, date(2026, 5, 11), time(7, 45), time(12, 0))
+        r = client.get(f"/user/{login_alice}/entry?date=2026-05-11")
+        html = r.data.decode()
+        assert html.index('value="07:45"') < html.index('value="13:15"')
+
+    def test_get_without_entry_uses_default_window(self, client, login_alice):
+        r = client.get(f"/user/{login_alice}/entry?date=2026-05-11")
+        assert b'value="09:00"' in r.data
+        assert b'value="17:30"' in r.data
+
+    def test_vacation_removes_all_windows(self, client, login_alice, app, make_workday):
+        make_workday(login_alice, date(2026, 5, 11), time(8, 0), time(12, 0))
+        make_workday(login_alice, date(2026, 5, 11), time(13, 0), time(17, 0))
+        _post_entry(client, login_alice, kind="vacation")
+        assert _windows(app, login_alice) == []
+
+    def test_delete_day_removes_all_windows(self, client, login_alice, app, make_workday):
+        make_workday(login_alice, date(2026, 5, 11), time(8, 0), time(12, 0))
+        make_workday(login_alice, date(2026, 5, 11), time(13, 0), time(17, 0))
+        client.post(f"/user/{login_alice}/day/2026-05-11/delete")
+        assert _windows(app, login_alice) == []
