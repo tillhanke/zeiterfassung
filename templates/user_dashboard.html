@@ -1,6 +1,18 @@
 {% extends "base.html" %}
 {% set MONATE = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'] %}
 {% block title %}{{ user.name }} – {{ MONATE[month-1] }} {{ year }}{% endblock %}
+{# Tagesart als Pille (Farbe + Text); in der Tabelle ab lg eigene Spalte, darunter unter dem Datum. #}
+{% macro kind_pill(d) -%}
+  {% if d.kind == 'work' %}<span class="zf-kind work">Arbeit</span>
+  {%- elif d.kind == 'vacation' %}<span class="zf-kind vacation">Urlaub</span>
+  {%- elif d.kind == 'sick' %}<span class="zf-kind sick">Krank</span>
+  {%- elif d.kind == 'holiday' %}<span class="zf-kind holiday">Feiertag</span>
+  {%- elif d.kind == 'empty' %}<span class="zf-kind empty">fehlt</span>
+  {%- elif d.kind == 'weekend' %}<span class="zf-kind off">Wochenende</span>
+  {%- elif d.kind == 'future' %}<span class="zf-kind off">noch offen</span>
+  {%- elif d.kind == 'inactive' %}<span class="zf-kind off">vor Start</span>
+  {%- endif %}
+{%- endmacro %}
 {% block content %}
 
 {% if is_admin %}
@@ -114,7 +126,7 @@
               <dd class="col-6 text-end mb-1">{{ year_summary.carry_over|hm_signed }} h</dd>
             {% endif %}
             <dt class="col-6 fw-normal text-muted">Urlaub / Krank</dt>
-            <dd class="col-6 text-end mb-1">{{ year_summary.vacation_days }} / {{ year_summary.sick_days }} Tage</dd>
+            <dd class="col-6 text-end mb-1">{{ year_summary.vacation_days }} / {{ year_summary.sick_days }}</dd>
             <dt class="col-6 fw-normal text-muted">Arbeitstage</dt>
             <dd class="col-6 text-end mb-0">{{ year_summary.worked_days }}</dd>
           </dl>
@@ -155,8 +167,8 @@
           {% endif %}
         </div>
       </div>
-      <div><div class="zf-stat-label">Urlaub</div><div class="zf-stat-value">{{ summary.vacation_days }} Tage</div></div>
-      <div><div class="zf-stat-label">Krank</div><div class="zf-stat-value">{{ summary.sick_days }} Tage</div></div>
+      <div><div class="zf-stat-label">Urlaub</div><div class="zf-stat-value">{{ summary.vacation_days }} {{ 'Tag' if summary.vacation_days == 1 else 'Tage' }}</div></div>
+      <div><div class="zf-stat-label">Krank</div><div class="zf-stat-value">{{ summary.sick_days }} {{ 'Tag' if summary.sick_days == 1 else 'Tage' }}</div></div>
     </div>
   </div>
 
@@ -165,11 +177,11 @@
       <thead class="table-light">
         <tr>
           <th>Tag</th>
-          <th>Art</th>
+          <th class="d-none d-lg-table-cell">Art</th>
           <th>Zeiten</th>
           <th class="text-end">Ist</th>
           <th class="text-end">± Soll</th>
-          <th>Hinweis</th>
+          <th class="d-none d-lg-table-cell">Hinweis</th>
           <th class="text-end"><span class="visually-hidden">Aktionen</span></th>
         </tr>
       </thead>
@@ -179,24 +191,17 @@
             <td>
               {{ d.date|tag }}
               {% if d.date == today %}<span class="badge text-bg-primary ms-1">heute</span>{% endif %}
+              <div class="d-lg-none mt-1">{{ kind_pill(d) }}</div>
             </td>
-            <td>
-              {% if d.kind == 'work' %}<span class="zf-kind work">Arbeit</span>
-              {% elif d.kind == 'vacation' %}<span class="zf-kind vacation">Urlaub</span>
-              {% elif d.kind == 'sick' %}<span class="zf-kind sick">Krank</span>
-              {% elif d.kind == 'holiday' %}<span class="zf-kind holiday">Feiertag</span>
-              {% elif d.kind == 'empty' %}<span class="zf-kind empty">fehlt</span>
-              {% elif d.kind == 'weekend' %}<span class="zf-kind off">Wochenende</span>
-              {% elif d.kind == 'future' %}<span class="zf-kind off">noch offen</span>
-              {% elif d.kind == 'inactive' %}<span class="zf-kind off">vor Start</span>
-              {% endif %}
-            </td>
+            <td class="d-none d-lg-table-cell">{{ kind_pill(d) }}</td>
             <td>
               {% if d.kind == 'work' and d.windows %}
                 {% for s, e in d.windows %}
                   <span class="text-nowrap">{{ s.strftime('%H:%M') }}–{% if e %}{{ e.strftime('%H:%M') }}{% else %}<span class="badge text-bg-success">läuft</span>{% endif %}</span>{% if not loop.last %}<br />{% endif %}
                 {% endfor %}
               {% else %}<span class="text-muted">–</span>{% endif %}
+              {% set show_note = d.note and d.kind not in ('vacation', 'sick', 'future') %}
+              {% if show_note %}<div class="d-lg-none"><small class="text-muted">{{ d.note }}</small></div>{% endif %}
             </td>
             <td class="text-end">
               {% if d.kind in ('work', 'vacation', 'sick') %}{{ d.net|hm }}{% else %}<span class="text-muted">–</span>{% endif %}
@@ -206,8 +211,8 @@
                 <span class="{{ 'text-plus' if d.diff >= 0 else 'text-minus' }}">{{ d.diff|hm_signed }}</span>
               {% else %}<span class="text-muted">–</span>{% endif %}
             </td>
-            <td>
-              {% if d.kind not in ('vacation', 'sick', 'future') %}<small class="text-muted">{{ d.note }}</small>{% endif %}
+            <td class="d-none d-lg-table-cell">
+              {% if show_note %}<small class="text-muted">{{ d.note }}</small>{% endif %}
             </td>
             <td class="text-end text-nowrap">
               {% set edit_url = url_for('entry_form', user_id=user.id, date=d.date.isoformat()) %}
