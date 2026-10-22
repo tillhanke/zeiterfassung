@@ -52,6 +52,12 @@ Tablet, kioskartig).
   „Jetzt nachtragen" (öffnet diesen Tag im Eintragsformular). Die Karte
   „Heute" nennt dann statt „Anfang" den Grund, warum nicht gestempelt
   werden kann (ERF-12).
+- **UI-8** – Der runde Avatar einer Nutzerin (Startseite, Topbar) zeigt ein
+  Kürzel, das unter den aktiven Nutzerinnen eindeutig ist: bei mehrteiligen
+  Namen die Anfangsbuchstaben aller Teile („Anna Maria" → „AM"), sonst den
+  ersten Buchstaben. Kollidieren Kürzel, werden sie um weitere Buchstaben
+  des (letzten) Namensteils verlängert („Maria"/„Michaela" → „Ma"/„Mi"),
+  höchstens auf drei Zeichen.
 
 ## Nicht im Umfang
 
