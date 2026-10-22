@@ -7,7 +7,7 @@ import pytest
 
 import app as app_module
 import logic
-from models import Absence, WorkDay
+from models import Absence, Setting, WorkDay, db
 
 
 @pytest.fixture
@@ -47,7 +47,14 @@ def _end(client, user_id):
     return client.post(f"/user/{user_id}/clock/end", follow_redirects=True)
 
 
-class TestRoundToQuarter:
+def _set_rounding(app, mode, step=15):
+    with app.app_context():
+        Setting.set_str(Setting.ROUNDING_MODE, mode)
+        Setting.set_str(Setting.ROUNDING_STEP, str(step))
+        db.session.commit()
+
+
+class TestRoundClockTime:
     @pytest.mark.parametrize(
         "hh, mm, expected",
         [
@@ -62,8 +69,80 @@ class TestRoundToQuarter:
             (23, 59, time(23, 45)),
         ],
     )
-    def test_rounds_to_nearest_quarter(self, hh, mm, expected):
-        assert logic.round_to_quarter(datetime(2026, 5, 11, hh, mm)) == expected
+    def test_default_rounds_to_nearest_quarter(self, hh, mm, expected):
+        """ERF-15: Standard symmetrisch/15, höchstens bis 23:45."""
+        for is_end in (False, True):
+            assert logic.round_clock_time(datetime(2026, 5, 11, hh, mm), is_end) == expected
+
+    @pytest.mark.parametrize(
+        "mode, step, now, is_end, expected",
+        [
+            ("nearest", 5, (8, 2), False, time(8, 0)),
+            ("nearest", 5, (8, 3), True, time(8, 5)),
+            ("nearest", 10, (8, 14), False, time(8, 10)),
+            ("nearest", 10, (8, 15), False, time(8, 20)),
+            ("nearest", 10, (23, 58), True, time(23, 50)),
+            # Zugunsten der Nutzerin: Anfang ab, Ende auf
+            ("employee", 15, (8, 14), False, time(8, 0)),
+            ("employee", 15, (16, 31), True, time(16, 45)),
+            ("employee", 15, (16, 30), True, time(16, 30)),
+            ("employee", 15, (23, 50), True, time(23, 45)),
+            # Zugunsten des Betriebs: Anfang auf, Ende ab
+            ("employer", 15, (8, 1), False, time(8, 15)),
+            ("employer", 15, (8, 0), False, time(8, 0)),
+            ("employer", 10, (16, 59), True, time(16, 50)),
+            ("employer", 5, (23, 58), False, time(23, 55)),
+            # Minutengenau: Raster egal
+            ("exact", 15, (8, 7), False, time(8, 7)),
+            ("exact", 15, (23, 59), True, time(23, 59)),
+        ],
+    )
+    def test_modes_and_steps(self, mode, step, now, is_end, expected):
+        """ERF-15: Modus und Raster als Firmeneinstellung."""
+        assert logic.round_clock_time(datetime(2026, 5, 11, *now), is_end, mode, step) == expected
+
+    def test_one_sided_ignores_seconds(self):
+        """ERF-15: Einseitig zählen nur volle Minuten, minutengenau schneidet Sekunden ab."""
+        assert logic.round_clock_time(datetime(2026, 5, 11, 8, 0, 40), True, "employee") == time(8, 0)
+        assert logic.round_clock_time(datetime(2026, 5, 11, 8, 0, 40), False, "employer") == time(8, 0)
+        assert logic.round_clock_time(datetime(2026, 5, 11, 8, 7, 59), True, "exact") == time(8, 7)
+
+    def test_minute_options(self):
+        """ERF-5: Formular-Raster folgt der Einstellung, minutengenau jede Minute."""
+        assert logic.minute_options("nearest", 15) == ["00", "15", "30", "45"]
+        assert logic.minute_options("employer", 10) == ["00", "10", "20", "30", "40", "50"]
+        assert len(logic.minute_options("exact", 15)) == 60
+
+
+class TestClockUsesSetting:
+    def test_employee_mode(self, client, login_alice, app, freeze_now):
+        """ERF-15: Stempeln rundet nach Firmeneinstellung."""
+        _set_rounding(app, "employee", 10)
+        freeze_now(datetime(2026, 5, 11, 8, 9))
+        _start(client, login_alice)
+        freeze_now(datetime(2026, 5, 11, 16, 41))
+        _end(client, login_alice)
+        assert _windows(app, login_alice) == [(time(8, 0), time(16, 50))]
+
+    def test_exact_mode(self, client, login_alice, app, freeze_now):
+        """ERF-15: minutengenau."""
+        _set_rounding(app, "exact")
+        freeze_now(datetime(2026, 5, 11, 8, 7, 30))
+        r = _start(client, login_alice)
+        assert "Anfang 08:07 gesetzt".encode() in r.data
+
+    def test_invalid_stored_values_fall_back_to_default(self, client, login_alice, app, freeze_now):
+        """ERF-15: Ungültige Werte -> Standard symmetrisch/15."""
+        _set_rounding(app, "bogus", 7)
+        freeze_now(datetime(2026, 5, 11, 8, 8))
+        _start(client, login_alice)
+        assert _windows(app, login_alice) == [(time(8, 15), None)]
+
+    def test_existing_times_unchanged(self, client, login_alice, app, freeze_now, make_workday):
+        """ERF-15: Änderung wirkt nur auf neue Stempelungen."""
+        make_workday(login_alice, date(2026, 5, 11), time(7, 7), time(11, 53))
+        _set_rounding(app, "nearest", 15)
+        assert _windows(app, login_alice) == [(time(7, 7), time(11, 53))]
 
 
 class TestClockStart:

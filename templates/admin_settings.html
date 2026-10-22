@@ -23,6 +23,44 @@
     </div>
   </section>
 
+  <section class="card mb-3">
+    <div class="card-body">
+      <h2 class="h6 fw-semibold mb-1">Rundung beim Stempeln</h2>
+      <p class="form-text mt-0 mb-3">
+        Gilt für „Anfang" und „Ende"; bereits gestempelte Zeiten bleiben unverändert.
+        Die Uhrzeit-Auswahl im Eintragsformular folgt dem Raster.
+      </p>
+      <div class="row g-3">
+        <div class="col-sm-8">
+          <label class="form-label small mb-1" for="rounding_mode">Modus</label>
+          <select class="form-select" id="rounding_mode" name="rounding_mode">
+            {% for key, label in rounding_modes.items() %}
+              <option value="{{ key }}"{% if key == rounding_mode %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-sm-4">
+          <label class="form-label small mb-1" for="rounding_step">Raster</label>
+          <select class="form-select" id="rounding_step" name="rounding_step">
+            {% for v in rounding_steps %}
+              <option value="{{ v }}"{% if v == rounding_step %} selected{% endif %}>{{ v }} min</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <button class="btn btn-primary" type="submit">Speichern</button>
 </form>
+<script>
+  // Bei minutengenauer Rundung spielt das Raster keine Rolle.
+  (function () {
+    const mode = document.getElementById('rounding_mode');
+    const step = document.getElementById('rounding_step');
+    const sync = () => { step.disabled = mode.value === 'exact'; };
+    mode.addEventListener('change', sync);
+    sync();
+  })();
+</script>
 {% endblock %}

@@ -305,6 +305,18 @@ def yearly_reset_enabled() -> bool:
     return Setting.get_bool(Setting.YEARLY_RESET, True)
 
 
+def rounding_settings() -> tuple[str, int]:
+    """Firmen-Einstellung Rundung beim Stempeln (ERF-15): (Modus, Raster).
+    Ungültige gespeicherte Werte fallen auf den Standard zurück."""
+    mode = Setting.get_str(Setting.ROUNDING_MODE, logic.DEFAULT_ROUNDING[0])
+    step = Setting.get_str(Setting.ROUNDING_STEP, str(logic.DEFAULT_ROUNDING[1]))
+    if mode not in logic.ROUNDING_MODES:
+        mode = logic.DEFAULT_ROUNDING[0]
+    if not step.isdigit() or int(step) not in logic.ROUNDING_STEPS:
+        step = str(logic.DEFAULT_ROUNDING[1])
+    return mode, int(step)
+
+
 def year_summary_for(user: User, year: int) -> logic.YearSummary:
     """Jahresübersicht inkl. Vorjahres-Saldo, falls nicht genullt wird."""
     year_start, next_year_start = date(year, 1, 1), date(year + 1, 1, 1)
@@ -566,6 +578,7 @@ def register_routes(app: Flask) -> None:
             entries_json=json.dumps(entries),
             last_workday=_last_workday(user, today),
             editing=editing,
+            minute_options=logic.minute_options(*rounding_settings()),
         )
 
     def _last_workday(user: User, before: date) -> Optional[dict]:
@@ -737,7 +750,7 @@ def register_routes(app: Flask) -> None:
             return _redirect_today(user)
         now = datetime.now()
         today = now.date()
-        start_t = logic.round_to_quarter(now)
+        start_t = logic.round_clock_time(now, False, *rounding_settings())
 
         if logic.is_holiday(today):
             flash("An Feiertagen kann keine Arbeitszeit gestempelt werden.", "danger")
@@ -785,7 +798,7 @@ def register_routes(app: Flask) -> None:
             return _redirect_today(user)
         now = datetime.now()
         today = now.date()
-        end_t = logic.round_to_quarter(now)
+        end_t = logic.round_clock_time(now, True, *rounding_settings())
 
         running = WorkDay.query.filter_by(
             user_id=user.id, date=today, end_time=None
@@ -866,15 +879,26 @@ def register_routes(app: Flask) -> None:
         if request.method == "POST":
             yearly_reset = request.form.get("yearly_reset") == "1"
             Setting.set_bool(Setting.YEARLY_RESET, yearly_reset)
+            # Rundung (ERF-15): nur gültige Werte übernehmen, fehlende Felder
+            # lassen die bisherige Einstellung unverändert.
+            mode = request.form.get("rounding_mode")
+            step = request.form.get("rounding_step", "")
+            if mode in logic.ROUNDING_MODES:
+                Setting.set_str(Setting.ROUNDING_MODE, mode)
+            if step.isdigit() and int(step) in logic.ROUNDING_STEPS:
+                Setting.set_str(Setting.ROUNDING_STEP, step)
             db.session.commit()
-            flash(
-                "Saldo wird zum Jahreswechsel auf 0 gesetzt."
-                if yearly_reset
-                else "Saldo wird ins neue Jahr übernommen.",
-                "success",
-            )
+            flash("Einstellungen gespeichert.", "success")
             return redirect(url_for("admin_settings"))
-        return render_template("admin_settings.html", yearly_reset=yearly_reset_enabled())
+        mode, step = rounding_settings()
+        return render_template(
+            "admin_settings.html",
+            yearly_reset=yearly_reset_enabled(),
+            rounding_mode=mode,
+            rounding_step=step,
+            rounding_modes=logic.ROUNDING_MODES,
+            rounding_steps=logic.ROUNDING_STEPS,
+        )
 
     def _parse_weekly_hours(raw: str) -> tuple[Optional[float], Optional[str]]:
         try:

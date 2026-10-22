@@ -74,20 +74,45 @@ def windows_net_hours(windows: Iterable[Window]) -> float:
     return sum(net_hours(gross_hours(s, e)) for s, e in _closed(windows))
 
 
-QUARTER_MINUTES = 15
-_LAST_QUARTER = 23 * 60 + 45
+# Rundung beim Stempeln (ERF-15): Modi und erlaubte Raster in Minuten.
+ROUND_NEAREST = "nearest"    # symmetrisch zur nächsten Rasterzeit
+ROUND_EMPLOYEE = "employee"  # zugunsten der Nutzerin: Anfang ab, Ende auf
+ROUND_EMPLOYER = "employer"  # zugunsten des Betriebs: Anfang auf, Ende ab
+ROUND_EXACT = "exact"        # minutengenau
+ROUNDING_MODES = {
+    ROUND_NEAREST: "symmetrisch (zur nächsten Rasterzeit)",
+    ROUND_EMPLOYEE: "zugunsten der Nutzerin (Anfang ab, Ende auf)",
+    ROUND_EMPLOYER: "zugunsten des Betriebs (Anfang auf, Ende ab)",
+    ROUND_EXACT: "minutengenau",
+}
+ROUNDING_STEPS = (5, 10, 15)
+DEFAULT_ROUNDING = (ROUND_NEAREST, 15)
 
 
-def round_to_quarter(now: datetime) -> time:
-    """Rundet auf die nächste Viertelstunde (08:07 -> 08:00, 08:08 -> 08:15).
+def round_clock_time(now: datetime, is_end: bool, mode: str = ROUND_NEAREST,
+                     step: int = 15) -> time:
+    """Rundet eine gestempelte Uhrzeit nach Modus und Raster (ERF-15).
 
-    Nach 23:52 würde auf 24:00 gerundet; das ist keine gültige Uhrzeit des
-    Tages, daher wird auf 23:45 begrenzt.
+    Symmetrisch/15: 08:07 -> 08:00, 08:08 -> 08:15. Höchstens bis zur letzten
+    Rasterzeit vor Mitternacht (24:00 ist keine Uhrzeit des Tages), also
+    23:59 -> 23:45. Minutengenau schneidet nur die Sekunden ab.
     """
-    minutes = now.hour * 60 + now.minute + now.second / 60
-    rounded = int(minutes / QUARTER_MINUTES + 0.5) * QUARTER_MINUTES
-    rounded = min(rounded, _LAST_QUARTER)
+    if mode == ROUND_EXACT:
+        return time(now.hour, now.minute)
+    minutes = now.hour * 60 + now.minute
+    if mode == ROUND_NEAREST:
+        rounded = int((minutes + now.second / 60) / step + 0.5) * step
+    else:
+        round_up = is_end if mode == ROUND_EMPLOYEE else not is_end
+        rounded = -(-minutes // step) * step if round_up else minutes // step * step
+    rounded = min(rounded, (24 * 60 - 1) // step * step)
     return time(rounded // 60, rounded % 60)
+
+
+def minute_options(mode: str, step: int) -> list[str]:
+    """Minuten der Uhrzeit-Auswahl im Formular (ERF-5): Raster der Rundung,
+    bei minutengenauer Rundung jede Minute."""
+    return [f"{m:02d}" for m in range(0, 60, 1 if mode == ROUND_EXACT else step)]
 
 
 def check_clock_start(windows: list[Window], start: time) -> Optional[str]:
@@ -667,9 +692,6 @@ assert windows_net_hours([(time(8, 0), time(12, 0)), (time(13, 0), time(17, 0))]
 assert windows_net_hours([(time(8, 0), time(15, 0)), (time(16, 0), time(18, 0))]) == 8.5
 assert validate_windows([(time(8, 0), time(12, 0)), (time(11, 0), time(14, 0))]) is not None
 assert validate_windows([(time(8, 0), time(12, 0)), (time(12, 0), time(14, 0))]) is None
-assert round_to_quarter(datetime(2026, 5, 11, 8, 7)) == time(8, 0)
-assert round_to_quarter(datetime(2026, 5, 11, 8, 8)) == time(8, 15)
-assert round_to_quarter(datetime(2026, 5, 11, 23, 59)) == time(23, 45)
 assert windows_net_hours([(time(8, 0), time(12, 0)), (time(13, 0), None)]) == 4.0
 assert shift_month(2026, 1, -1) == (2025, 12)
 assert shift_month(2026, 12, 1) == (2027, 1)

@@ -3,10 +3,11 @@
    <form> stehen, das Radio-Buttons name="kind" und ein Feld name="dates"
    (kommagetrennte ISO-Daten) enthält. workFields.setWindows([[s, e], …])
    ersetzt die Zeitfenster (z. B. für Vorlagen).
-   Uhrzeiten werden als Stunde + Minute (15-min-Raster) ausgewählt; der Server
+   Uhrzeiten werden als Stunde + Minute im Raster der Rundungseinstellung
+   (minute_options, ERF-5) ausgewählt; der Server
    setzt <prefix>_hour/<prefix>_minute wieder zu HH:MM zusammen. #}
 {% macro time_select(prefix, label, value) %}
-  {% set MINUTES = ['00', '15', '30', '45'] %}
+  {% set MINUTES = minute_options or ['00', '15', '30', '45'] %}
   {% set parts = (value or '').split(':') %}
   {% set h = parts[0] if parts|length == 2 else '' %}
   {% set m = parts[1] if parts|length == 2 else '' %}
@@ -108,7 +109,12 @@
     function writeTime(group, value) {
       const [h, m] = value ? value.split(':') : ['', ''];
       group.querySelector('.hour').value = h;
-      group.querySelector('.minute').value = m;
+      const minute = group.querySelector('.minute');
+      // Zeiten außerhalb des Rasters (z. B. aus einer Vorlage) nicht verlieren (ERF-5).
+      if (m && ![...minute.options].some(o => o.value === m)) {
+        minute.add(new Option(m, m));
+      }
+      minute.value = m;
     }
 
     function showError(msg) {

@@ -27,9 +27,8 @@ Dashboard.
 - **ERF-4** – Beim Bearbeiten werden alle Zeitfenster des Tages gemeinsam
   ersetzt. Löschen eines Tages entfernt alle Zeitfenster und die Abwesenheit.
 - **ERF-5** – Uhrzeiten werden im Formular als Stunde und Minute im Raster
-  gewählt (→ ERF-15). Vorhandene Zeiten außerhalb des Rasters bleiben beim
-  Bearbeiten erhalten.
-  *(offen: Raster ist derzeit fest 15 min)*
+  gewählt (→ ERF-15), bei minutengenauer Rundung jede Minute. Vorhandene
+  Zeiten außerhalb des Rasters bleiben beim Bearbeiten erhalten.
 
 ### Wann was eingetragen werden darf
 
@@ -83,8 +82,9 @@ Dashboard.
   auf), *zugunsten des Betriebs* (Anfang auf, Ende ab) oder *minutengenau*.
   Gerundet wird höchstens bis zur letzten Rasterzeit vor Mitternacht.
   Beispiel symmetrisch/15: 08:07 → 08:00, 08:08 → 08:15, 23:59 → 23:45.
-  → ADR-0009
-  *(offen: derzeit fest symmetrisch auf 15 min)*
+  Beim einseitigen Runden zählen nur volle Minuten (Ende 08:00:40 bleibt
+  08:00); minutengenau schneidet die Sekunden ab. Eine geänderte
+  Einstellung wirkt nur auf neue Stempelungen. → ADR-0009
 
 ## Nicht im Umfang
 

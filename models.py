@@ -82,6 +82,8 @@ class Setting(db.Model):
     __tablename__ = "settings"
 
     YEARLY_RESET = "yearly_reset"
+    ROUNDING_MODE = "rounding_mode"
+    ROUNDING_STEP = "rounding_step"
 
     key = db.Column(db.String(64), primary_key=True)
     value = db.Column(db.String(255), nullable=False)
@@ -98,6 +100,19 @@ class Setting(db.Model):
             db.session.add(cls(key=key, value="1" if value else "0"))
         else:
             row.value = "1" if value else "0"
+
+    @classmethod
+    def get_str(cls, key: str, default: str) -> str:
+        row = db.session.get(cls, key)
+        return default if row is None else row.value
+
+    @classmethod
+    def set_str(cls, key: str, value: str) -> None:
+        row = db.session.get(cls, key)
+        if row is None:
+            db.session.add(cls(key=key, value=value))
+        else:
+            row.value = value
 
     def __repr__(self) -> str:
         return f"<Setting {self.key}={self.value}>"

@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from datetime import date, time
 
-from models import Absence, WorkDay
+from models import Absence, Setting, WorkDay, db
 
 
 def _post_entry(client, user_id, **overrides):
@@ -46,8 +46,17 @@ class TestEntryFormGet:
         assert b"Krank" in r.data
 
     def test_minute_select_offers_only_quarter_hours(self, client, login_alice):
+        """ERF-5: Standard-Raster 15 min."""
         r = client.get(f"/user/{login_alice}/entry")
         assert _minute_options(r.data.decode()) == [["", "00", "15", "30", "45"]] * 2
+
+    def test_minute_select_follows_rounding_setting(self, client, login_alice, app):
+        """ERF-5: Raster der Uhrzeit-Auswahl folgt der Rundungseinstellung."""
+        with app.app_context():
+            Setting.set_str(Setting.ROUNDING_STEP, "10")
+            db.session.commit()
+        r = client.get(f"/user/{login_alice}/entry")
+        assert _minute_options(r.data.decode()) == [["", "00", "10", "20", "30", "40", "50"]] * 2
 
     def test_hour_select_offers_full_day(self, client, login_alice):
         html = client.get(f"/user/{login_alice}/entry").data.decode()

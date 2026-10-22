@@ -206,6 +206,26 @@ class TestOverview:
         assert "Deaktiviert (1)" in html
         assert html.index("Deaktiviert (1)") > html.index(">Alice</a>")
 
+    def test_rounding_saved_on_settings_page(self, client, login_admin, app):
+        """NUTZ-8, ERF-15: Rundung als Firmeneinstellung."""
+        html = client.get("/admin/settings").data.decode()
+        assert 'name="rounding_mode"' in html and 'name="rounding_step"' in html
+        assert '<option value="nearest" selected>' in html
+        assert '<option value="15" selected>' in html
+        client.post("/admin/settings", data={"rounding_mode": "employer", "rounding_step": "5"})
+        html = client.get("/admin/settings").data.decode()
+        assert '<option value="employer" selected>' in html
+        assert '<option value="5" selected>' in html
+
+    def test_rounding_invalid_or_missing_values_ignored(self, client, login_admin):
+        """ERF-15: Ungültige oder fehlende Werte ändern die Rundung nicht."""
+        client.post("/admin/settings", data={"rounding_mode": "employee", "rounding_step": "10"})
+        client.post("/admin/settings", data={"rounding_mode": "bogus", "rounding_step": "7"})
+        client.post("/admin/settings", data={"rounding_mode": "exact"})  # Raster deaktiviert
+        html = client.get("/admin/settings").data.decode()
+        assert '<option value="exact" selected>' in html
+        assert '<option value="10" selected>' in html
+
     def test_settings_saved_on_settings_page(self, client, login_admin):
         r = client.post("/admin/settings", data={"yearly_reset": "1"})
         assert r.headers["Location"].endswith("/admin/settings")
