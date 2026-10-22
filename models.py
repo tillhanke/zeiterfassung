@@ -17,6 +17,10 @@ class User(db.Model):
     name = db.Column(db.String(120), nullable=False, unique=True)
     weekly_hours = db.Column(db.Float, nullable=False, default=40.0)
     active = db.Column(db.Boolean, nullable=False, default=True)
+    # Optionaler Stichtag: Einträge davor zählen nicht mehr, stattdessen gilt
+    # start_balance (Überstunden, auch negativ) als Saldo zu Beginn dieses Tages.
+    start_date: Optional[date] = db.Column(db.Date, nullable=True)
+    start_balance = db.Column(db.Float, nullable=False, default=0.0, server_default="0")
 
     workdays = db.relationship(
         "WorkDay", backref="user", cascade="all, delete-orphan", lazy="dynamic"

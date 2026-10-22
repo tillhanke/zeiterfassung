@@ -217,10 +217,13 @@ class DaySummary:
     date: date
     weekday: int  # 0=Mo
     # 'work' | 'vacation' | 'sick' | 'holiday' | 'empty' | 'weekend' | 'future'
+    # | 'inactive'
     # Arbeit am Wochenende ist 'work' mit target=0, zählt also komplett als
     # Überstunden; das Wochensoll bleibt auf Mo-Fr verteilt.
     # 'future' = leerer Mo-Fr-Tag in der Zukunft (zählt nicht ins Soll, damit
     # er keinen künstlichen Minus-Saldo erzeugt).
+    # 'inactive' = Tag vor dem Startdatum der Nutzerin; zählt nicht, auch wenn
+    # dort noch Einträge liegen.
     kind: str
     gross: float
     net: float
@@ -254,9 +257,12 @@ class MonthSummary:
     target_hours: float
     actual_hours: float
 
+    # Übertrag zum Startdatum, falls es in diesem Zeitraum liegt.
+    opening_balance: float = 0.0
+
     @property
     def saldo(self) -> float:
-        return self.actual_hours - self.target_hours
+        return self.actual_hours - self.target_hours + self.opening_balance
 
     @property
     def vacation_days(self) -> int:
@@ -275,6 +281,18 @@ class MonthSummary:
         return sum(1 for d in self.days if d.kind == "holiday")
 
 
+def opening_balance_between(user: User, first: date, last: date) -> float:
+    """Übertrag der Nutzerin, wenn ihr Startdatum in [first, last] liegt, sonst 0."""
+    start = getattr(user, "start_date", None)
+    if start is not None and first <= start <= last:
+        return getattr(user, "start_balance", 0.0) or 0.0
+    return 0.0
+
+
+def _inactive_note(has_entry: bool) -> str:
+    return "vor Startdatum · Eintrag zählt nicht" if has_entry else "vor Startdatum"
+
+
 def build_month_summary(
     user: User,
     year: int,
@@ -290,10 +308,15 @@ def build_month_summary(
     Soll noch zum Ist bei, damit zukünftige Tage keinen künstlichen
     Minus-Saldo erzeugen. Eingetragene Arbeit/Urlaub/Krank an zukünftigen
     Tagen zählen dagegen normal mit.
+
+    Tage vor `user.start_date` sind 'inactive' und zählen weder ins Soll noch
+    ins Ist; liegt das Startdatum im Monat, fließt `user.start_balance` als
+    Übertrag in den Saldo ein.
     """
     if today is None:
         today = date.today()
     daily_target = user.daily_target
+    start_date = getattr(user, "start_date", None)
     wd_by_date = group_windows_by_date(workdays)
     abs_by_date = {a.date: a for a in absences}
 
@@ -311,7 +334,14 @@ def build_month_summary(
         # An Feiertagen entfallen die Soll-Stunden (auch wenn sie auf einen Mo-Fr fallen).
         target = daily_target if (is_weekday and not is_holi) else 0.0
 
-        if d in wd_by_date:
+        if start_date is not None and d < start_date:
+            has_entry = d in wd_by_date or d in abs_by_date
+            days.append(
+                DaySummary(
+                    d, d.weekday(), "inactive", 0.0, 0.0, 0.0, _inactive_note(has_entry)
+                )
+            )
+        elif d in wd_by_date:
             windows = wd_by_date[d]
             g = windows_gross_hours(windows)
             n = windows_net_hours(windows)
@@ -364,6 +394,13 @@ def build_month_summary(
             )
             target_total += target
 
+    first_day, last_day = date(year, month, 1), date(year, month, last)
+    opening = opening_balance_between(user, first_day, last_day)
+    if start_date is not None and first_day <= start_date <= last_day:
+        start_day = days[start_date.day - 1]
+        transfer = f"Übertrag {opening:+.2f} h"
+        start_day.note = f"{transfer} · {start_day.note}" if start_day.note else transfer
+
     return MonthSummary(
         user=user,
         year=year,
@@ -371,6 +408,7 @@ def build_month_summary(
         days=days,
         target_hours=target_total,
         actual_hours=actual_total,
+        opening_balance=opening,
     )
 
 
@@ -395,9 +433,12 @@ class YearSummary:
     sick_days: int
     worked_days: int
 
+    # Übertrag zum Startdatum, falls es in diesem Zeitraum liegt.
+    opening_balance: float = 0.0
+
     @property
     def saldo(self) -> float:
-        return self.actual_hours - self.target_hours
+        return self.actual_hours - self.target_hours + self.opening_balance
 
 
 def build_year_summary(
@@ -415,10 +456,13 @@ def build_year_summary(
     - Arbeitstag: actual += Summe der Netto-Stunden aller Zeitfenster
     - Urlaub/Krank: actual += target (zählt als erfüllt)
     - Leerer Mo-Fr-Tag in der Zukunft (d > today): zählt nicht ins Soll.
+    - Tag vor user.start_date: zählt gar nicht; der Übertrag fließt ein, wenn
+      das Startdatum in diesem Jahr liegt.
     """
     if today is None:
         today = date.today()
     daily_target = user.daily_target
+    start_date = getattr(user, "start_date", None)
     wd_by_date = group_windows_by_date(workdays)
     abs_by_date = {a.date: a for a in absences}
 
@@ -429,6 +473,8 @@ def build_year_summary(
     worked = 0
 
     d = date(year, 1, 1)
+    if start_date is not None and start_date > d:
+        d = start_date
     end_exclusive = date(year + 1, 1, 1)
     one_day = timedelta(days=1)
     while d < end_exclusive:
@@ -466,6 +512,9 @@ def build_year_summary(
         vacation_days=vacation,
         sick_days=sick,
         worked_days=worked,
+        opening_balance=opening_balance_between(
+            user, date(year, 1, 1), date(year, 12, 31)
+        ),
     )
 
 

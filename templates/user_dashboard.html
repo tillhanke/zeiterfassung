@@ -7,7 +7,12 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
     <h1 class="h3 mb-0">{{ user.name }}</h1>
-    <small class="text-muted">{{ user.weekly_hours }} h/Woche · Soll/Tag {{ '%.2f'|format(user.daily_target) }} h</small>
+    <small class="text-muted">
+      {{ user.weekly_hours }} h/Woche · Soll/Tag {{ '%.2f'|format(user.daily_target) }} h
+      {% if user.start_date %}
+        · Start {{ user.start_date.isoformat() }} mit Übertrag {{ '%+.2f'|format(user.start_balance) }} h
+      {% endif %}
+    </small>
   </div>
   <div class="d-flex gap-2">
     <a class="btn btn-outline-primary" href="{{ url_for('bulk_entry_form', user_id=user.id) }}">
@@ -55,6 +60,9 @@
         <div class="fs-4 {{ 'month-saldo-positive' if summary.saldo >= 0 else 'month-saldo-negative' }}">
           {{ '%+.2f'|format(summary.saldo) }} h
         </div>
+        {% if summary.opening_balance %}
+          <div class="text-muted small">inkl. Übertrag {{ '%+.2f'|format(summary.opening_balance) }} h</div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -87,6 +95,9 @@
         <strong class="{{ 'month-saldo-positive' if year_summary.saldo >= 0 else 'month-saldo-negative' }}">
           {{ '%+.2f'|format(year_summary.saldo) }} h
         </strong>
+        {% if year_summary.opening_balance %}
+          <span class="text-muted small">(inkl. Übertrag {{ '%+.2f'|format(year_summary.opening_balance) }} h)</span>
+        {% endif %}
       </div>
       <div>
         <span class="text-muted small">Urlaub / Krank </span>
@@ -133,6 +144,7 @@
               {% elif d.kind == 'holiday' %}<span class="badge bg-info text-dark">Feiertag</span>
               {% elif d.kind == 'weekend' %}<span class="text-muted">Wochenende</span>
               {% elif d.kind == 'future' %}<span class="text-muted small">noch offen</span>
+              {% elif d.kind == 'inactive' %}<span class="text-muted small">inaktiv</span>
               {% else %}<span class="text-muted">—</span>
               {% endif %}
             </td>
@@ -155,7 +167,7 @@
             </td>
             <td><small class="text-muted">{{ d.note }}</small></td>
             <td class="text-end">
-              {% if d.kind != 'holiday' %}
+              {% if d.kind not in ('holiday', 'inactive') %}
                 {% if d.date == today and d.kind in ('work', 'empty', 'weekend') %}
                   {% if d.running %}
                     <form method="post" action="{{ url_for('clock_end', user_id=user.id) }}" class="d-inline">

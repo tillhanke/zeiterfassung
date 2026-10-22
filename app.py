@@ -263,6 +263,38 @@ def replace_windows(user_id: int, d: date, windows: list[logic.Window]) -> None:
 DEFAULT_WINDOWS = [("09:00", "17:30")]
 
 
+def parse_start(form) -> tuple[Optional[date], float, Optional[str]]:
+    """Liest Startdatum und Übertrag (Stunden, auch negativ) aus dem Formular.
+
+    Leeres Datum heißt: kein Startdatum, dann muss auch der Übertrag leer/0 sein.
+    Gibt (Startdatum, Übertrag, Fehler) zurück.
+    """
+    date_str = (form.get("start_date") or "").strip()
+    balance_str = (form.get("start_balance") or "").strip().replace(",", ".")
+    try:
+        balance = float(balance_str) if balance_str else 0.0
+    except ValueError:
+        return None, 0.0, "Ungültiger Übertrag."
+    if not date_str:
+        if balance:
+            return None, 0.0, "Für einen Übertrag bitte ein Startdatum angeben."
+        return None, 0.0, None
+    try:
+        start = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return None, 0.0, "Ungültiges Startdatum."
+    return start, balance, None
+
+
+def before_start_error(user: User, d: date) -> Optional[str]:
+    if user.start_date is not None and d < user.start_date:
+        return (
+            f"Vor dem Startdatum ({user.start_date.isoformat()}) "
+            "können keine Einträge gemacht werden."
+        )
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Routen
 # ---------------------------------------------------------------------------
@@ -408,6 +440,10 @@ def register_routes(app: Flask) -> None:
             except ValueError:
                 flash("Ungültiges Datum.", "danger")
                 return render_form()
+            error = before_start_error(user, entry_date)
+            if error:
+                flash(error, "danger")
+                return render_form()
 
             existing_abs = Absence.query.filter_by(
                 user_id=user.id, date=entry_date
@@ -511,6 +547,14 @@ def register_routes(app: Flask) -> None:
             if not unique_dates:
                 flash("Bitte mindestens ein Datum auswählen.", "danger")
                 return render_form()
+            if user.start_date is not None:
+                before = [d for d in unique_dates if d < user.start_date]
+                unique_dates = [d for d in unique_dates if d >= user.start_date]
+                if not unique_dates:
+                    flash(before_start_error(user, before[0]), "danger")
+                    return render_form()
+                if before:
+                    flash(f"{len(before)} Tag(e) vor dem Startdatum übersprungen.", "info")
 
             if kind == "work":
                 windows, raw, error = parse_windows(request.form)
@@ -588,6 +632,10 @@ def register_routes(app: Flask) -> None:
 
         if logic.is_holiday(today):
             flash("An Feiertagen kann keine Arbeitszeit gestempelt werden.", "danger")
+            return _redirect_today(user)
+        error = before_start_error(user, today)
+        if error:
+            flash(error, "danger")
             return _redirect_today(user)
         if Absence.query.filter_by(user_id=user.id, date=today).first():
             flash("Für heute ist Urlaub/Krank eingetragen.", "danger")
@@ -705,10 +753,22 @@ def register_routes(app: Flask) -> None:
         if weekly_hours <= 0 or weekly_hours > 60:
             flash("Wochenstunden müssen zwischen 0 und 60 liegen.", "danger")
             return redirect(url_for("admin"))
+        start_date, start_balance, error = parse_start(request.form)
+        if error:
+            flash(error, "danger")
+            return redirect(url_for("admin"))
         if User.query.filter_by(name=name).first():
             flash("Eine Nutzerin mit diesem Namen existiert bereits.", "warning")
             return redirect(url_for("admin"))
-        db.session.add(User(name=name, weekly_hours=weekly_hours, active=True))
+        db.session.add(
+            User(
+                name=name,
+                weekly_hours=weekly_hours,
+                active=True,
+                start_date=start_date,
+                start_balance=start_balance,
+            )
+        )
         db.session.commit()
         flash(f"Nutzerin „{name}“ angelegt.", "success")
         return redirect(url_for("admin"))
@@ -724,6 +784,13 @@ def register_routes(app: Flask) -> None:
             user.active = False
         elif action == "activate":
             user.active = True
+        elif action == "start":
+            start_date, start_balance, error = parse_start(request.form)
+            if error:
+                flash(error, "danger")
+                return redirect(url_for("admin"))
+            user.start_date = start_date
+            user.start_balance = start_balance
         else:
             try:
                 weekly_hours = float(
@@ -822,6 +889,27 @@ def migrate_workdays_schema() -> bool:
     return True
 
 
+def migrate_users_schema() -> bool:
+    """Ergänzt in einer älteren `users`-Tabelle die Spalten für Startdatum und
+    Übertrag. Idempotent; gibt True zurück, wenn migriert wurde."""
+    columns = {
+        row[1] for row in db.session.execute(text("PRAGMA table_info(users)"))
+    }
+    if not columns:
+        return False
+    added = False
+    if "start_date" not in columns:
+        db.session.execute(text("ALTER TABLE users ADD COLUMN start_date DATE"))
+        added = True
+    if "start_balance" not in columns:
+        db.session.execute(
+            text("ALTER TABLE users ADD COLUMN start_balance FLOAT NOT NULL DEFAULT 0")
+        )
+        added = True
+    db.session.commit()
+    return added
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -834,6 +922,8 @@ def register_cli(app: Flask) -> None:
         with app.app_context():
             if migrate_workdays_schema():
                 print("Tabelle workdays auf aktuelles Schema migriert.")
+            if migrate_users_schema():
+                print("Tabelle users um Startdatum/Übertrag ergänzt.")
             db.create_all()
             print("Datenbank initialisiert.")
 

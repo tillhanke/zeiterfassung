@@ -24,6 +24,11 @@ eintragbar. Ein Admin-Panel verwaltet Nutzerinnen und ihre Wochenarbeitszeit.
   Zukunft erzeugen keine Minus-Stunden. Bereits eingetragene Arbeit/Urlaub/Krank
   an zukünftigen Tagen zählen normal mit.
 - Urlaubs- und Krankentage werden mit dem Tagessoll als „erfüllt" gewertet.
+- Optionales Startdatum mit Übertrag pro Nutzerin: Einträge vor dem
+  Startdatum bleiben gespeichert, zählen aber nicht mehr (und neue sind dort
+  nicht möglich). Der Übertrag (Über- oder Minusstunden) ist der Saldo zu
+  Beginn des Startdatums und fließt in Monats- und Jahressaldo dieses
+  Zeitraums ein.
 - Gesetzliche Feiertage in **Sachsen-Anhalt** werden automatisch berücksichtigt
   (an Feiertagen entfällt das Tagessoll, also kein Aufholbedarf nötig):
   Neujahr, Heilige Drei Könige, Karfreitag, Ostermontag, Tag der Arbeit,
@@ -129,8 +134,8 @@ Die SQLite-Datenbank wird im Flask-`instance/`-Ordner als `zeiterf.db` abgelegt.
 3. Im Dashboard wird der laufende Monat mit allen Tagen, Soll/Ist/Saldo und
    Urlaubs-/Krankentagen angezeigt. Über die Pfeile kann zwischen Monaten
    navigiert werden.
-4. Als Admin: Nutzerinnen-Liste mit Saldo, Wochenstunden inline bearbeiten,
-   Nutzerinnen anlegen oder deaktivieren.
+4. Als Admin: Nutzerinnen-Liste mit Saldo, Wochenstunden sowie Startdatum
+   und Übertrag inline bearbeiten, Nutzerinnen anlegen oder deaktivieren.
 
 ## Projektstruktur
 
@@ -166,6 +171,7 @@ zeiterf/
     ├── test_bulk_entry.py # Sammeleintrag (mehrere Tage)
     ├── test_dashboard.py  # Dashboard-Rendering
     ├── test_admin.py      # Admin-Panel, User-CRUD
+    ├── test_start_date.py # Startdatum und Übertrag
     └── test_cli.py        # init-db / reset-db
 ```
 

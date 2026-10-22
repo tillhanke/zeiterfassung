@@ -13,6 +13,7 @@
         <tr>
           <th>Name</th>
           <th class="text-end">Wochenstunden</th>
+          <th>Startdatum / Übertrag</th>
           <th class="text-end">Soll-Monat</th>
           <th class="text-end">Ist-Monat</th>
           <th class="text-end">Saldo</th>
@@ -34,6 +35,19 @@
                     class="d-inline-flex gap-1 justify-content-end">
                 <input type="number" step="0.5" min="0" max="60"
                        name="weekly_hours" value="{{ u.weekly_hours }}"
+                       class="form-control form-control-sm" style="width: 6rem" />
+                <button class="btn btn-sm btn-outline-primary" type="submit">Speichern</button>
+              </form>
+            </td>
+            <td>
+              <form method="post" action="{{ url_for('admin_update_user', user_id=u.id) }}"
+                    class="d-inline-flex gap-1">
+                <input type="hidden" name="action" value="start" />
+                <input type="date" name="start_date"
+                       value="{{ u.start_date.isoformat() if u.start_date else '' }}"
+                       class="form-control form-control-sm" style="width: 9.5rem" />
+                <input type="number" step="0.25" name="start_balance"
+                       value="{{ u.start_balance if u.start_date else '' }}" placeholder="± h"
                        class="form-control form-control-sm" style="width: 6rem" />
                 <button class="btn btn-sm btn-outline-primary" type="submit">Speichern</button>
               </form>
@@ -79,17 +93,30 @@
   <div class="card-header">Neue Nutzerin anlegen</div>
   <div class="card-body">
     <form method="post" action="{{ url_for('admin_create_user') }}" class="row g-2">
-      <div class="col-md-6">
+      <div class="col-md-4">
         <label class="form-label">Name</label>
         <input type="text" name="name" class="form-control" required />
       </div>
-      <div class="col-md-3">
+      <div class="col-md-2">
         <label class="form-label">Wochenstunden</label>
         <input type="number" step="0.5" min="0" max="60" name="weekly_hours"
                value="40" class="form-control" required />
       </div>
-      <div class="col-md-3 d-flex align-items-end">
+      <div class="col-md-2">
+        <label class="form-label">Startdatum</label>
+        <input type="date" name="start_date" class="form-control" />
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Übertrag (h)</label>
+        <input type="number" step="0.25" name="start_balance" placeholder="± h"
+               class="form-control" />
+      </div>
+      <div class="col-md-2 d-flex align-items-end">
         <button class="btn btn-primary w-100" type="submit">Anlegen</button>
+      </div>
+      <div class="col-12 form-text">
+        Optional: Ab dem Startdatum wird gerechnet, frühere Einträge zählen nicht.
+        Der Übertrag (Überstunden, negativ = Minusstunden) ist der Saldo zu Beginn des Startdatums.
       </div>
     </form>
   </div>
