@@ -30,3 +30,4 @@ laufen über Alembic-Migrationen (ADR-0012).
   Stunden-/Minuten-Auswahl, falls die App später auf Tablets genutzt wird;
   braucht eine Anpassung von ERF-5 (Zeiten außerhalb des Rasters beim
   Bearbeiten)
+- Mehrfache Sprachen supporten
