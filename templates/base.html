@@ -53,6 +53,11 @@
     crossorigin="anonymous"
   ></script>
   {% if active_identity %}
+  <div class="zf-idle-warning" id="idleWarning" role="alertdialog" aria-live="assertive"
+       aria-labelledby="idleWarningText" hidden>
+    <div id="idleWarningText">Keine Eingabe – du wirst in <strong id="idleCountdown">60</strong> s abgemeldet.</div>
+    <button type="button" class="btn btn-primary" id="idleStay">Weiter arbeiten</button>
+  </div>
   <script>
     // Inaktivitäts-Timeout: ohne Maus/Tastatur/Scroll/Touch wechselt die Seite
     // nach idle_timeout_seconds zur Willkommensseite. Aktivität wird höchstens
@@ -62,11 +67,16 @@
       const TIMEOUT_MS = {{ idle_timeout_seconds * 1000 }};
       const PING_MS = 60 * 1000;
       const TIMEOUT_URL = '{{ url_for("idle_timeout") }}';
+      // Hinweis mit Countdown vor dem Abmelden (NUTZ-3); jede Eingabe bricht ab.
+      const WARN_MS = Math.min(60 * 1000, TIMEOUT_MS / 2);
+      const warning = document.getElementById('idleWarning');
+      const countdown = document.getElementById('idleCountdown');
       let lastActivity = Date.now();
       let lastPing = Date.now();
 
       function onActivity() {
         lastActivity = Date.now();
+        warning.hidden = true;
         if (lastActivity - lastPing < PING_MS) return;
         lastPing = lastActivity;
         fetch('{{ url_for("keepalive") }}', { method: 'POST', credentials: 'same-origin' })
@@ -79,8 +89,13 @@
       );
       // Intervall statt einmaligem setTimeout: funktioniert auch nach Standby korrekt.
       setInterval(() => {
-        if (Date.now() - lastActivity >= TIMEOUT_MS) window.location.href = TIMEOUT_URL;
-      }, 5000);
+        const idle = Date.now() - lastActivity;
+        if (idle >= TIMEOUT_MS) { window.location.href = TIMEOUT_URL; return; }
+        if (idle >= TIMEOUT_MS - WARN_MS) {
+          countdown.textContent = Math.ceil((TIMEOUT_MS - idle) / 1000);
+          warning.hidden = false;
+        }
+      }, 1000);
     })();
   </script>
   {% endif %}

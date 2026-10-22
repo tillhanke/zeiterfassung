@@ -24,7 +24,8 @@ Verwaltung der Nutzerinnen und Firmeneinstellungen im Admin-Panel.
   wechselt die Seite zur Startseite und die Identität wird verworfen. Der
   Server setzt das auch durch, wenn der Browser es nicht tut (z. B. nach
   Standby). Ein inaktiver Tab meldet einen parallel aktiven Tab nicht ab.
-  → ADR-0002
+  Eine Minute vorher erscheint ein Hinweis mit Countdown und „Weiter
+  arbeiten"; jede Eingabe bricht ihn ab. → ADR-0002
 
 ### Verwaltung
 

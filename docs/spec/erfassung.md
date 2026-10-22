@@ -1,7 +1,8 @@
 # Erfassung (`ERF`)
 
-Wie Nutzerinnen Arbeitszeiten und Abwesenheiten eintragen: Einzeleintrag,
-Sammeleintrag und Stempeln („Anfang"/„Ende") im Dashboard.
+Wie Nutzerinnen Arbeitszeiten und Abwesenheiten eintragen: das
+Eintragsformular (ein oder mehrere Tage) und Stempeln („Anfang"/„Ende") im
+Dashboard.
 
 ## Begriffe
 
@@ -35,20 +36,29 @@ Sammeleintrag und Stempeln („Anfang"/„Ende") im Dashboard.
 - **ERF-6** – Arbeit kann an jedem Tag eingetragen werden, auch an Sa/So und
   an Feiertagen. → ADR-0005
   *(offen: an Feiertagen bietet das Dashboard derzeit kein „Ändern" an)*
-- **ERF-7** – Urlaub/Krank nur an Tagen mit Soll (Mo–Fr ohne Feiertag). Der
-  Einzeleintrag lehnt andere Tage ab, der Sammeleintrag überspringt sie mit
-  Hinweis. → ADR-0005
+- **ERF-7** – Urlaub/Krank nur an Tagen mit Soll (Mo–Fr ohne Feiertag). Ist
+  nur ein Tag gewählt, wird ein anderer Tag abgelehnt; bei mehreren Tagen
+  werden solche Tage mit Hinweis übersprungen. → ADR-0005
   *(offen: an Feiertagen wird Urlaub/Krank derzeit gespeichert und ignoriert)*
 - **ERF-8** – Vor dem Startdatum der Nutzerin sind keine Einträge und kein
-  Stempeln möglich. Der Sammeleintrag überspringt solche Tage mit Hinweis.
-  → ADR-0007
+  Stempeln möglich. Bei mehreren Tagen werden solche Tage mit Hinweis
+  übersprungen; im Kalender sind sie nicht wählbar. → ADR-0007
 
-### Sammeleintrag
+### Eintragsformular
 
-- **ERF-9** – Der Sammeleintrag trägt beliebig viele, auch nicht
+- **ERF-9** – Ein Formular trägt einen oder beliebig viele, auch nicht
   aufeinanderfolgende Tage mit denselben Zeitfenstern bzw. derselben
-  Abwesenheit ein.
+  Abwesenheit ein. Tage werden in einem Kalender gewählt: einzeln oder als
+  Zeitraum (erster und letzter Tag; Wochenenden und Feiertage werden dabei
+  ausgelassen). Ohne Vorauswahl ist heute gewählt; „Ändern" in der
+  Tagesliste wählt den Tag und belegt Art und Zeitfenster vor. Vorhandene
+  Einträge sind im Kalender markiert, vor dem Speichern wird angezeigt,
+  wie viele davon ersetzt werden. → ADR-0019
 - **ERF-10** – Bei einem Validierungsfehler wird kein einziger Tag gespeichert.
+  Das Formular bleibt mit Auswahl und Eingaben erhalten.
+- **ERF-16** – Gibt es vor heute einen abgeschlossenen Arbeitstag, bietet das
+  Formular die Vorlage „Wie letzter Arbeitstag" an: Sie übernimmt dessen
+  Zeitfenster in die Eingabe (ohne zu speichern).
 
 ### Stempeln
 
@@ -82,5 +92,5 @@ Sammeleintrag und Stempeln („Anfang"/„Ende") im Dashboard.
 
 ## Verweise
 
-- ADRs: 0005, 0007, 0009, 0010
+- ADRs: 0005, 0007, 0009, 0010, 0019
 - Tests: `tests/test_entry.py`, `tests/test_bulk_entry.py`, `tests/test_clock.py`

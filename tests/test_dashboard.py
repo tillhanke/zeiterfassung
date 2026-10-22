@@ -136,10 +136,9 @@ class TestDashboardContent:
         r = client.get(f"/user/{alice_id}?year=2026&month=5")
         assert r.status_code == 200
 
-    def test_bulk_button_present(self, client, login_alice):
-        r = client.get(f"/user/{login_alice}?year=2026&month=5")
-        assert b"Mehrere Tage" in r.data
-
-    def test_add_button_links_to_today(self, client, login_alice):
-        r = client.get(f"/user/{login_alice}?year=2026&month=5")
-        assert b"Tag eintragen" in r.data
+    def test_single_entry_button(self, client, login_alice):
+        """Ein Button für einen oder mehrere Tage (ERF-9)."""
+        html = client.get(f"/user/{login_alice}?year=2026&month=5").data.decode()
+        assert "+ Eintragen" in html
+        assert f'href="/user/{login_alice}/entry"' in html
+        assert "Mehrere Tage" not in html

@@ -13,9 +13,10 @@ eintragbar. Ein Admin-Panel verwaltet Nutzerinnen und ihre Wochenarbeitszeit.
 
 - Mehrere Nutzerinnen, jeweils mit individueller Wochenarbeitszeit (Standard 40 h).
 - Tageseintrag als **Arbeit** (Start- und Endzeit), **Urlaub** oder **Krank**.
-- **Sammeleintrag**: Mehrere (auch nicht aufeinanderfolgende) Tage gleichzeitig
-  mit derselben Arbeitszeit bzw. als Urlaub/Krank eintragen. Einzeltage hinzufügen
-  oder einen Zeitraum (optional nur Mo-Fr, Feiertage überspringen) einlesen.
+- **Ein Eintragsformular für einen oder mehrere Tage**: Tage im Kalender
+  einzeln oder als Zeitraum (ohne Wochenenden/Feiertage) wählen und mit
+  derselben Arbeitszeit bzw. als Urlaub/Krank eintragen; Vorlage „Wie letzter
+  Arbeitstag".
 - Pausenabzug nach ArbZG §4:
   - > 6 h Bruttoarbeit → 30 min Pause abgezogen
   - > 9 h Bruttoarbeit → 45 min Pause abgezogen
@@ -175,8 +176,8 @@ zeiterf/
 │   ├── base.html
 │   ├── index.html
 │   ├── user_dashboard.html
-│   ├── entry_form.html
-│   ├── bulk_entry_form.html
+│   ├── entry_form.html    # Eintragen mit Kalender (ein oder mehrere Tage)
+│   ├── _work_windows.html # Zeitfenster-Eingabe mit Live-Vorschau
 │   └── admin.html
 └── tests/
     ├── conftest.py        # gemeinsame pytest-Fixtures
@@ -184,7 +185,7 @@ zeiterf/
     ├── test_models.py     # DB-Constraints, Cascade
     ├── test_auth.py       # Session-Switch, Route-Schutz
     ├── test_entry.py      # Einzel-Tageseintrag
-    ├── test_bulk_entry.py # Sammeleintrag (mehrere Tage)
+    ├── test_bulk_entry.py # mehrere Tage auf einmal eintragen
     ├── test_dashboard.py  # Dashboard-Rendering
     ├── test_admin.py      # Admin-Panel, User-CRUD
     ├── test_start_date.py # Startdatum und Übertrag

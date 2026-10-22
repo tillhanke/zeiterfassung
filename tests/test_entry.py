@@ -39,7 +39,8 @@ class TestEntryFormGet:
     def test_get_form_renders(self, client, login_alice):
         r = client.get(f"/user/{login_alice}/entry")
         assert r.status_code == 200
-        assert b"Datum" in r.data
+        assert b"Tage w\xc3\xa4hlen" in r.data
+        assert b'id="calendar"' in r.data
         assert b"Arbeit" in r.data
         assert b"Urlaub" in r.data
         assert b"Krank" in r.data
@@ -320,3 +321,74 @@ class TestWeekend:
         make_workday(login_alice, date(2026, 5, 9), time(9, 0), time(12, 0))
         _post_entry(client, login_alice, date="2026-05-09", kind="sick")
         assert _windows(app, login_alice) == [(time(9, 0), time(12, 0))]
+
+
+class TestUnifiedForm:
+    """Ein Formular für einen oder mehrere Tage (ERF-9, ERF-16)."""
+
+    def test_holidays_and_minute_grid_in_form(self, client, login_alice):
+        html = client.get(f"/user/{login_alice}/entry?date=2026-05-11").data.decode()
+        assert '"2026-05-01": "Tag der Arbeit"' in html
+        assert _minute_options(html) == [["", "00", "15", "30", "45"]] * 2
+
+    def test_today_preselected_without_date(self, client, login_alice):
+        html = client.get(f"/user/{login_alice}/entry").data.decode()
+        assert f'id="datesField" value="{date.today().isoformat()}"' in html
+        assert "Eintragen</h1>" in html
+
+    def test_several_days_via_entry_route(self, client, login_alice, app):
+        """ERF-9: mehrere Tage über das gemeinsame Formular."""
+        r = client.post(
+            f"/user/{login_alice}/entry",
+            data={"kind": "work", "dates": "2026-05-11,2026-05-13",
+                  "start_time": "08:00", "end_time": "16:00"},
+        )
+        assert r.status_code == 302
+        with app.app_context():
+            assert sorted(w.date for w in WorkDay.query.all()) == [date(2026, 5, 11), date(2026, 5, 13)]
+        page = client.get(r.headers["Location"]).data.decode()
+        assert "Arbeitszeit für 2 Tage gespeichert." in page
+
+    def test_single_day_message_names_date(self, client, login_alice):
+        r = _post_entry(client, login_alice)
+        page = client.get(r.headers["Location"]).data.decode()
+        assert "Arbeitszeit für 11.05.2026 gespeichert." in page
+
+    def test_single_weekend_absence_rejected(self, client, login_alice, app):
+        """ERF-7: ein einzelner Wochenendtag mit Urlaub wird abgelehnt."""
+        r = _post_entry(client, login_alice, kind="vacation", date="2026-05-09")
+        assert r.status_code == 200
+        assert "nur an Werktagen".encode() in r.data
+        with app.app_context():
+            assert Absence.query.count() == 0
+
+    def test_edit_existing_absence_prefills_kind(self, client, login_alice, make_absence):
+        make_absence(login_alice, date(2026, 5, 11), Absence.KIND_SICK)
+        html = client.get(f"/user/{login_alice}/entry?date=2026-05-11").data.decode()
+        assert "Eintrag ändern</h1>" in html
+        assert 'id="kindSick" value="sick" checked' in html
+        assert '"2026-05-11": "sick"' in html  # Kalender markiert vorhandenen Eintrag
+
+    def test_error_keeps_selection(self, client, login_alice):
+        r = client.post(
+            f"/user/{login_alice}/entry",
+            data={"kind": "work", "dates": "2026-05-11,2026-05-12",
+                  "start_time": "17:00", "end_time": "08:00"},
+        )
+        assert r.status_code == 200
+        assert b'id="datesField" value="2026-05-11,2026-05-12"' in r.data
+        assert _selected_times(r.data.decode()) == [("17:00", "08:00")]
+
+    def test_last_workday_preset(self, client, login_alice, make_workday):
+        """ERF-16: Vorlage „Wie letzter Arbeitstag“ mit dessen Zeitfenstern."""
+        make_workday(login_alice, date(2026, 5, 7), time(9, 0), time(12, 0))
+        make_workday(login_alice, date(2026, 5, 8), time(8, 0), time(12, 0))
+        make_workday(login_alice, date(2026, 5, 8), time(12, 30), time(16, 45))
+        html = client.get(f"/user/{login_alice}/entry").data.decode()
+        assert "Wie letzter Arbeitstag" in html
+        assert "Fr 08.05.:" in html
+        assert '[["08:00", "12:00"], ["12:30", "16:45"]]' in html
+
+    def test_no_preset_without_history(self, client, login_alice):
+        html = client.get(f"/user/{login_alice}/entry").data.decode()
+        assert "Wie letzter Arbeitstag" not in html

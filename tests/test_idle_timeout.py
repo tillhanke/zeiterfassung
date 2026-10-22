@@ -143,6 +143,14 @@ class TestClientScript:
         assert "/timeout" in html
         assert "/keepalive" in html
 
+    def test_warning_before_logout(self, client, alice_id):
+        """NUTZ-3: eine Minute vorher erscheint ein Hinweis mit Countdown."""
+        _login(client, alice_id)
+        html = client.get(f"/user/{alice_id}").data.decode()
+        assert 'id="idleWarning"' in html
+        assert "const WARN_MS = Math.min(60 * 1000, TIMEOUT_MS / 2);" in html
+        assert ">Weiter arbeiten</button>" in html
+
     def test_no_script_on_welcome_page(self, client):
         html = client.get("/").data.decode()
         assert "TIMEOUT_MS" not in html

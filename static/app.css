@@ -213,3 +213,101 @@ details.zf-details > summary {
   color: var(--zf-muted);
   font-size: .875rem;
 }
+
+/* ---------- Eintragsformular ---------- */
+
+.zf-cal-nav { min-width: var(--zf-touch); min-height: var(--zf-touch); }
+.zf-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: .3rem;
+}
+.zf-cal-head {
+  text-align: center;
+  font-size: .8rem;
+  color: var(--zf-muted);
+  padding-bottom: .2rem;
+}
+.zf-cal-day {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  min-height: 2.75rem;
+  border: 1px solid var(--zf-border);
+  border-radius: .5rem;
+  background: var(--zf-surface);
+  color: var(--zf-text);
+  font-weight: 500;
+}
+.zf-cal-day:hover:not(:disabled) { border-color: var(--zf-accent); }
+.zf-cal-day.is-weekend { background: var(--zf-off-bg); color: var(--zf-off); }
+.zf-cal-day.is-holiday { background: var(--zf-holiday-bg); color: var(--zf-holiday); }
+.zf-cal-day.is-today { box-shadow: inset 0 0 0 2px var(--zf-accent); }
+.zf-cal-day.is-anchor { border: 2px dashed var(--zf-accent); }
+.zf-cal-day.is-selected {
+  background: var(--zf-accent);
+  border-color: var(--zf-accent);
+  color: #fff;
+}
+.zf-cal-day:disabled { opacity: .35; }
+/* Punkt unten = vorhandener Eintrag, Farbe nach Art */
+.zf-cal-day[class*="has-"]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  width: .4rem;
+  height: .4rem;
+  margin-left: -.2rem;
+  border-radius: 50%;
+}
+.zf-cal-day.has-work::after     { background: var(--zf-work); }
+.zf-cal-day.has-vacation::after { background: var(--zf-vacation); }
+.zf-cal-day.has-sick::after     { background: var(--zf-sick); }
+.zf-cal-day.is-selected::after  { background: #fff; }
+
+.zf-chip {
+  border: 1px solid var(--zf-border);
+  background: var(--zf-work-bg);
+  color: var(--zf-work);
+  border-radius: 999px;
+  padding: .25rem .65rem;
+  font-size: .85rem;
+}
+.zf-chip.has-entry { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+
+.zf-kind-choice {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .5rem;
+}
+.zf-kind-choice .btn {
+  min-height: 3.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.zf-btn-vacation { border-color: var(--zf-vacation); color: var(--zf-vacation); }
+.btn-check:checked + .zf-btn-vacation { background: var(--zf-vacation); color: #fff; border-color: var(--zf-vacation); }
+.zf-btn-sick { border-color: var(--zf-sick); color: var(--zf-sick); }
+.btn-check:checked + .zf-btn-sick { background: var(--zf-sick); color: #fff; border-color: var(--zf-sick); }
+
+/* ---------- Hinweis vor automatischem Abmelden ---------- */
+
+.zf-idle-warning {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  z-index: 1080;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  max-width: calc(100% - 2rem);
+  padding: 1rem 1.25rem;
+  background: #1f2937;
+  color: #fff;
+  border-radius: var(--zf-radius);
+  box-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .25);
+  font-size: 1.05rem;
+}
+.zf-idle-warning[hidden] { display: none; }

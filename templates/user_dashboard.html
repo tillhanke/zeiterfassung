@@ -35,14 +35,9 @@
       {% endif %}
     </small>
   </div>
-  <div class="d-flex gap-2">
-    <a class="btn btn-outline-primary" href="{{ url_for('bulk_entry_form', user_id=user.id) }}">
-      Mehrere Tage
-    </a>
-    <a class="btn btn-primary" href="{{ url_for('entry_form', user_id=user.id, date=today.isoformat()) }}">
-      + Tag eintragen
-    </a>
-  </div>
+  <a class="btn btn-primary btn-lg" href="{{ url_for('entry_form', user_id=user.id) }}">
+    + Eintragen
+  </a>
 </div>
 
 {# ---------- Heute + Gesamtsaldo ---------- #}

@@ -1,6 +1,8 @@
-{# Zeitfenster-Eingabe für Arbeitstage (genutzt von entry_form und bulk_entry_form).
+{# Zeitfenster-Eingabe für Arbeitstage (genutzt von entry_form).
    Erwartet: windows (Liste von (start, end)-Strings), user. Muss innerhalb eines
-   <form> stehen, das Radio-Buttons name="kind" enthält.
+   <form> stehen, das Radio-Buttons name="kind" und ein Feld name="dates"
+   (kommagetrennte ISO-Daten) enthält. workFields.setWindows([[s, e], …])
+   ersetzt die Zeitfenster (z. B. für Vorlagen).
    Uhrzeiten werden als Stunde + Minute (15-min-Raster) ausgewählt; der Server
    setzt <prefix>_hour/<prefix>_minute wieder zu HH:MM zusammen. #}
 {% macro time_select(prefix, label, value) %}
@@ -10,14 +12,14 @@
   {% set m = parts[1] if parts|length == 2 else '' %}
   <label class="form-label small mb-1">{{ label }}</label>
   <div class="input-group time-select {{ prefix }}-time">
-    <select name="{{ prefix }}_hour" class="form-select hour" aria-label="{{ label }}: Stunde">
+    <select name="{{ prefix }}_hour" class="form-select form-select-lg hour" aria-label="{{ label }}: Stunde">
       <option value="">--</option>
       {% for i in range(24) %}{% set v = '%02d'|format(i) %}
         <option value="{{ v }}"{% if v == h %} selected{% endif %}>{{ v }}</option>
       {% endfor %}
     </select>
     <span class="input-group-text">:</span>
-    <select name="{{ prefix }}_minute" class="form-select minute" aria-label="{{ label }}: Minute">
+    <select name="{{ prefix }}_minute" class="form-select form-select-lg minute" aria-label="{{ label }}: Minute">
       <option value="">--</option>
       {# Ältere Einträge außerhalb des Rasters nicht stillschweigend verändern. #}
       {% if m and m not in MINUTES %}<option value="{{ m }}" selected>{{ m }}</option>{% endif %}
@@ -28,19 +30,18 @@
   </div>
 {% endmacro %}
 <div id="workFields">
-  {% if windows_label %}<label class="form-label fw-semibold">{{ windows_label }}</label>{% endif %}
   <div id="windowRows">
     {% for start, end in windows %}
       <div class="row g-2 align-items-end mb-2 window-row">
         <div class="col">{{ time_select('start', 'Startzeit', start) }}</div>
         <div class="col">{{ time_select('end', 'Endzeit', end) }}</div>
         <div class="col-auto">
-          <button type="button" class="btn btn-outline-danger remove-window" aria-label="Zeitfenster entfernen">×</button>
+          <button type="button" class="btn btn-lg btn-outline-secondary remove-window" aria-label="Zeitfenster entfernen">×</button>
         </div>
       </div>
     {% endfor %}
   </div>
-  <button type="button" class="btn btn-outline-secondary btn-sm" id="addWindowBtn">+ Zeitfenster</button>
+  <button type="button" class="btn btn-outline-secondary" id="addWindowBtn">+ Zeitfenster (z. B. nach einer Pause)</button>
   <div class="form-text">
     Die gesetzliche Pause wird je Zeitfenster abgezogen – nur wenn ein einzelnes
     Fenster länger als 6 h (30 min) bzw. 9 h (45 min) ist.
@@ -68,15 +69,17 @@
     const diffText   = document.getElementById('diffText');
 
     const dailyTarget = {{ user.daily_target }};
-    // Nur im Einzeleintrag vorhanden: am Wochenende ist das Soll 0, die
-    // Arbeitszeit zählt dann komplett als Überstunden.
-    const dateEl = form.querySelector('input[name="date"]');
+    // Sind nur Wochenendtage gewählt, ist das Soll 0: die Arbeitszeit zählt
+    // dann komplett als Überstunden.
+    const datesEl = form.querySelector('input[name="dates"]');
 
     function isWeekend() {
-      if (!dateEl || !dateEl.value) return false;
-      const [y, m, d] = dateEl.value.split('-').map(Number);
-      const wd = new Date(y, m - 1, d).getDay();
-      return wd === 0 || wd === 6;
+      const dates = datesEl && datesEl.value ? datesEl.value.split(',') : [];
+      return dates.length > 0 && dates.every(s => {
+        const [y, m, d] = s.split('-').map(Number);
+        const wd = new Date(y, m - 1, d).getDay();
+        return wd === 0 || wd === 6;
+      });
     }
 
     function legalBreak(g) {
@@ -156,6 +159,20 @@
       diffText.textContent = '(' + signed(diff) + ' h ggü. Soll/Tag)';
     }
 
+    // Zeitfenster komplett ersetzen; die erste Zeile dient als Vorlage.
+    workFields.setWindows = function (list) {
+      const rows = rowsBox.querySelectorAll('.window-row');
+      const template = rows[0];
+      rows.forEach((r, i) => { if (i > 0) r.remove(); });
+      list.forEach(([s, e], i) => {
+        const row = i === 0 ? template : template.cloneNode(true);
+        writeTime(row.querySelector('.start-time'), s);
+        writeTime(row.querySelector('.end-time'), e);
+        if (i > 0) rowsBox.appendChild(row);
+      });
+      update();
+    };
+
     addBtn.addEventListener('click', () => {
       const rows = rowsBox.querySelectorAll('.window-row');
       const row = rows[rows.length - 1].cloneNode(true);
@@ -175,7 +192,7 @@
     });
 
     rowsBox.addEventListener('change', update);
-    if (dateEl) dateEl.addEventListener('change', update);
+    if (datesEl) datesEl.addEventListener('change', update);
     form.querySelectorAll('input[name="kind"]').forEach(r => r.addEventListener('change', update));
     update();
   })();

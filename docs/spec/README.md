@@ -49,7 +49,7 @@ Eine Verhaltensänderung ändert Spec, Code und Tests im selben Commit.
 
 | Kürzel | Datei | Inhalt |
 | ------ | ----- | ------ |
-| ERF    | [erfassung.md](erfassung.md) | Einträge, Sammeleintrag, Stempeln, Rundung |
+| ERF    | [erfassung.md](erfassung.md) | Eintragsformular (ein/mehrere Tage), Stempeln, Rundung |
 | PAUSE  | [pausen.md](pausen.md) | Pausenabzug nach ArbZG §4 |
 | SALDO  | [saldo.md](saldo.md) | Soll, Ist, Saldo, Startdatum, Jahreswechsel |
 | FEIER  | [feiertage.md](feiertage.md) | gesetzliche Feiertage |
