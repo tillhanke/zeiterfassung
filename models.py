@@ -74,3 +74,30 @@ class Absence(db.Model):
 
     def __repr__(self) -> str:
         return f"<Absence user={self.user_id} {self.date} {self.kind}>"
+
+
+class Setting(db.Model):
+    """Firmenweite Einstellungen als Schlüssel/Wert-Paare."""
+
+    __tablename__ = "settings"
+
+    YEARLY_RESET = "yearly_reset"
+
+    key = db.Column(db.String(64), primary_key=True)
+    value = db.Column(db.String(255), nullable=False)
+
+    @classmethod
+    def get_bool(cls, key: str, default: bool) -> bool:
+        row = db.session.get(cls, key)
+        return default if row is None else row.value == "1"
+
+    @classmethod
+    def set_bool(cls, key: str, value: bool) -> None:
+        row = db.session.get(cls, key)
+        if row is None:
+            db.session.add(cls(key=key, value="1" if value else "0"))
+        else:
+            row.value = "1" if value else "0"
+
+    def __repr__(self) -> str:
+        return f"<Setting {self.key}={self.value}>"

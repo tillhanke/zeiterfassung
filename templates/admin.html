@@ -3,7 +3,7 @@
 {% block title %}Admin-Panel{% endblock %}
 {% block content %}
 <h1 class="h3 mb-3">Admin-Panel</h1>
-<p class="text-muted">Saldo bezieht sich auf {{ MONATE[month-1] }} {{ year }}.</p>
+<p class="text-muted">Saldo bezieht sich auf {{ MONATE[month-1] }} {{ year }}, Gesamtsaldo auf den aktuellen Stand.</p>
 
 <div class="card mb-4">
   <div class="card-header">Nutzerinnen</div>
@@ -17,6 +17,7 @@
           <th class="text-end">Soll-Monat</th>
           <th class="text-end">Ist-Monat</th>
           <th class="text-end">Saldo</th>
+          <th class="text-end">Gesamtsaldo</th>
           <th class="text-end">Urlaub / Krank</th>
           <th>Status</th>
           <th class="text-end">Aktionen</th>
@@ -57,6 +58,10 @@
             <td class="text-end {{ 'month-saldo-positive' if s.saldo >= 0 else 'month-saldo-negative' }}">
               {{ '%+.2f'|format(s.saldo) }} h
             </td>
+            <td class="text-end {{ 'month-saldo-positive' if row.total >= 0 else 'month-saldo-negative' }}"
+                title="seit {{ row.since.isoformat() }}">
+              {{ '%+.2f'|format(row.total) }} h
+            </td>
             <td class="text-end">{{ s.vacation_days }} / {{ s.sick_days }}</td>
             <td>
               {% if u.active %}
@@ -86,6 +91,26 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header">Einstellungen</div>
+  <div class="card-body">
+    <form method="post" action="{{ url_for('admin_settings') }}"
+          class="d-flex flex-wrap align-items-center gap-3">
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="yearly_reset"
+               name="yearly_reset" value="1" {% if yearly_reset %}checked{% endif %} />
+        <label class="form-check-label" for="yearly_reset">
+          Saldo zum Jahreswechsel auf 0 setzen
+        </label>
+      </div>
+      <button class="btn btn-sm btn-outline-primary" type="submit">Speichern</button>
+      <div class="form-text w-100 mt-0">
+        Aus: Über- und Minusstunden werden ins neue Jahr übernommen.
+      </div>
+    </form>
   </div>
 </div>
 

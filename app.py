@@ -30,7 +30,7 @@ from flask import (
 )
 
 import logic
-from models import Absence, User, WorkDay, db
+from models import Absence, Setting, User, WorkDay, db
 
 
 def create_app(test_config: Optional[dict] = None) -> Flask:
@@ -286,6 +286,58 @@ def parse_start(form) -> tuple[Optional[date], float, Optional[str]]:
     return start, balance, None
 
 
+def yearly_reset_enabled() -> bool:
+    """Firmen-Einstellung: Saldo zum Jahreswechsel auf 0 setzen (Default: ja)."""
+    return Setting.get_bool(Setting.YEARLY_RESET, True)
+
+
+def year_summary_for(user: User, year: int) -> logic.YearSummary:
+    """Jahresübersicht inkl. Vorjahres-Saldo, falls nicht genullt wird."""
+    year_start, next_year_start = date(year, 1, 1), date(year + 1, 1, 1)
+    workdays = WorkDay.query.filter(
+        WorkDay.user_id == user.id,
+        WorkDay.date >= year_start,
+        WorkDay.date < next_year_start,
+    ).all()
+    absences = Absence.query.filter(
+        Absence.user_id == user.id,
+        Absence.date >= year_start,
+        Absence.date < next_year_start,
+    ).all()
+    carry = 0.0
+    if not yearly_reset_enabled():
+        carry = logic.carry_over_into(
+            user,
+            year,
+            WorkDay.query.filter(WorkDay.user_id == user.id, WorkDay.date < year_start).all(),
+            Absence.query.filter(Absence.user_id == user.id, Absence.date < year_start).all(),
+        )
+    return logic.build_year_summary(user, year, workdays, absences, carry_over=carry)
+
+
+def running_total(user: User) -> tuple[float, date]:
+    """Aktueller Gesamtsaldo und das Datum, ab dem er gezählt wird."""
+    this_year = date.today().year
+    if yearly_reset_enabled():
+        since = date(this_year, 1, 1)
+        if user.start_date is not None and user.start_date > since:
+            since = user.start_date
+    elif user.start_date is not None:
+        since = user.start_date
+    else:
+        # Wie logic.carry_over_into: ab dem 1.1. des Jahres mit dem ersten Eintrag.
+        firsts = [
+            d
+            for d in (
+                db.session.query(db.func.min(WorkDay.date)).filter_by(user_id=user.id).scalar(),
+                db.session.query(db.func.min(Absence.date)).filter_by(user_id=user.id).scalar(),
+            )
+            if d is not None
+        ]
+        since = date(min([this_year] + [d.year for d in firsts]), 1, 1)
+    return year_summary_for(user, this_year).saldo, since
+
+
 def before_start_error(user: User, d: date) -> Optional[str]:
     if user.start_date is not None and d < user.start_date:
         return (
@@ -389,19 +441,8 @@ def register_routes(app: Flask) -> None:
 
         summary = logic.build_month_summary(user, year, month, workdays, absences)
 
-        year_workdays = WorkDay.query.filter(
-            WorkDay.user_id == user.id,
-            WorkDay.date >= date(year, 1, 1),
-            WorkDay.date < date(year + 1, 1, 1),
-        ).all()
-        year_absences = Absence.query.filter(
-            Absence.user_id == user.id,
-            Absence.date >= date(year, 1, 1),
-            Absence.date < date(year + 1, 1, 1),
-        ).all()
-        year_summary = logic.build_year_summary(
-            user, year, year_workdays, year_absences
-        )
+        year_summary = year_summary_for(user, year)
+        total, total_since = running_total(user)
 
         prev_year, prev_month = logic.shift_month(year, month, -1)
         next_year, next_month = logic.shift_month(year, month, +1)
@@ -411,6 +452,8 @@ def register_routes(app: Flask) -> None:
             user=user,
             summary=summary,
             year_summary=year_summary,
+            running_total=total,
+            running_since=total_since,
             year=year,
             month=month,
             prev_year=prev_year,
@@ -735,8 +778,29 @@ def register_routes(app: Flask) -> None:
                 Absence.date < end_exclusive,
             ).all()
             summary = logic.build_month_summary(u, year, month, workdays, absences)
-            rows.append({"user": u, "summary": summary})
-        return render_template("admin.html", rows=rows, year=today.year, month=today.month)
+            total, since = running_total(u)
+            rows.append({"user": u, "summary": summary, "total": total, "since": since})
+        return render_template(
+            "admin.html",
+            rows=rows,
+            year=today.year,
+            month=today.month,
+            yearly_reset=yearly_reset_enabled(),
+        )
+
+    @app.post("/admin/settings")
+    @require_identity("admin")
+    def admin_settings():
+        yearly_reset = request.form.get("yearly_reset") == "1"
+        Setting.set_bool(Setting.YEARLY_RESET, yearly_reset)
+        db.session.commit()
+        flash(
+            "Saldo wird zum Jahreswechsel auf 0 gesetzt."
+            if yearly_reset
+            else "Saldo wird ins neue Jahr übernommen.",
+            "success",
+        )
+        return redirect(url_for("admin"))
 
     @app.post("/admin/users")
     @require_identity("admin")

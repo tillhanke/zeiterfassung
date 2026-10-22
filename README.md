@@ -29,6 +29,11 @@ eintragbar. Ein Admin-Panel verwaltet Nutzerinnen und ihre Wochenarbeitszeit.
   nicht möglich). Der Übertrag (Über- oder Minusstunden) ist der Saldo zu
   Beginn des Startdatums und fließt in Monats- und Jahressaldo dieses
   Zeitraums ein.
+- Firmenweite Einstellung im Admin-Panel: Saldo zum Jahreswechsel auf 0 setzen
+  (Standard) oder Über-/Minusstunden ins neue Jahr übernehmen. Ohne
+  Startdatum wird dann ab dem 1.1. des Jahres mit dem ersten Eintrag gezählt.
+- Aktueller Gesamtsaldo im Dashboard und im Admin-Panel (je nach Einstellung
+  seit Jahresbeginn bzw. seit Startdatum).
 - Gesetzliche Feiertage in **Sachsen-Anhalt** werden automatisch berücksichtigt
   (an Feiertagen entfällt das Tagessoll, also kein Aufholbedarf nötig):
   Neujahr, Heilige Drei Könige, Karfreitag, Ostermontag, Tag der Arbeit,
@@ -134,8 +139,9 @@ Die SQLite-Datenbank wird im Flask-`instance/`-Ordner als `zeiterf.db` abgelegt.
 3. Im Dashboard wird der laufende Monat mit allen Tagen, Soll/Ist/Saldo und
    Urlaubs-/Krankentagen angezeigt. Über die Pfeile kann zwischen Monaten
    navigiert werden.
-4. Als Admin: Nutzerinnen-Liste mit Saldo, Wochenstunden sowie Startdatum
-   und Übertrag inline bearbeiten, Nutzerinnen anlegen oder deaktivieren.
+4. Als Admin: Nutzerinnen-Liste mit Monats- und Gesamtsaldo, Wochenstunden
+   sowie Startdatum und Übertrag inline bearbeiten, Nutzerinnen anlegen oder
+   deaktivieren, Nullstellung zum Jahreswechsel ein-/ausschalten.
 
 ## Projektstruktur
 
@@ -172,6 +178,7 @@ zeiterf/
     ├── test_dashboard.py  # Dashboard-Rendering
     ├── test_admin.py      # Admin-Panel, User-CRUD
     ├── test_start_date.py # Startdatum und Übertrag
+    ├── test_running_total.py # Gesamtsaldo, Nullstellung zum Jahreswechsel
     └── test_cli.py        # init-db / reset-db
 ```
 

@@ -435,10 +435,14 @@ class YearSummary:
 
     # Übertrag zum Startdatum, falls es in diesem Zeitraum liegt.
     opening_balance: float = 0.0
+    # Saldo der Vorjahre; nur ohne Nullstellung zum Jahreswechsel != 0.
+    carry_over: float = 0.0
 
     @property
     def saldo(self) -> float:
-        return self.actual_hours - self.target_hours + self.opening_balance
+        return (
+            self.actual_hours - self.target_hours + self.opening_balance + self.carry_over
+        )
 
 
 def build_year_summary(
@@ -447,6 +451,7 @@ def build_year_summary(
     workdays: Iterable[WorkDay],
     absences: Iterable[Absence],
     today: Optional[date] = None,
+    carry_over: float = 0.0,
 ) -> YearSummary:
     """Aggregiert Soll/Ist/Saldo sowie Urlaubs- und Krankentage über das gesamte Jahr.
 
@@ -515,6 +520,42 @@ def build_year_summary(
         opening_balance=opening_balance_between(
             user, date(year, 1, 1), date(year, 12, 31)
         ),
+        carry_over=carry_over,
+    )
+
+
+def carry_over_into(
+    user: User,
+    year: int,
+    workdays: Iterable[WorkDay],
+    absences: Iterable[Absence],
+    today: Optional[date] = None,
+) -> float:
+    """Summe der Jahressalden aller Vorjahre (für "keine Nullstellung zum
+    Jahreswechsel").
+
+    Gezählt wird ab dem Jahr des Startdatums, ohne Startdatum ab dem Jahr des
+    ersten Eintrags. Einträge ab `year` werden ignoriert.
+    """
+    workdays = [w for w in workdays if w.date.year < year]
+    absences = [a for a in absences if a.date.year < year]
+    start_date = getattr(user, "start_date", None)
+    if start_date is not None:
+        first_year = start_date.year
+    else:
+        dates = [w.date for w in workdays] + [a.date for a in absences]
+        if not dates:
+            return 0.0
+        first_year = min(dates).year
+    return sum(
+        build_year_summary(
+            user,
+            y,
+            [w for w in workdays if w.date.year == y],
+            [a for a in absences if a.date.year == y],
+            today=today,
+        ).saldo
+        for y in range(first_year, year)
     )
 
 

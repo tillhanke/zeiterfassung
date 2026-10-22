@@ -24,6 +24,18 @@
   </div>
 </div>
 
+<div class="card mb-3 running-total">
+  <div class="card-body py-2 d-flex flex-wrap align-items-baseline gap-2">
+    <span class="text-muted small">Aktueller Gesamtsaldo (seit {{ running_since.isoformat() }})</span>
+    <strong class="fs-5 {{ 'month-saldo-positive' if running_total >= 0 else 'month-saldo-negative' }}">
+      {{ '%+.2f'|format(running_total) }} h
+    </strong>
+    <span class="text-muted small">
+      {% if running_total >= 0 %}im Plus{% else %}im Minus{% endif %}
+    </span>
+  </div>
+</div>
+
 <div class="d-flex justify-content-between align-items-center mb-2">
   <a class="btn btn-outline-secondary btn-sm"
      href="{{ url_for('user_dashboard', user_id=user.id, year=prev_year, month=prev_month) }}">
@@ -97,6 +109,9 @@
         </strong>
         {% if year_summary.opening_balance %}
           <span class="text-muted small">(inkl. Übertrag {{ '%+.2f'|format(year_summary.opening_balance) }} h)</span>
+        {% endif %}
+        {% if year_summary.carry_over %}
+          <span class="text-muted small">(inkl. Vorjahre {{ '%+.2f'|format(year_summary.carry_over) }} h)</span>
         {% endif %}
       </div>
       <div>
