@@ -1,6 +1,8 @@
 ---
 alwaysApply: true
 ---
-- if you edited parts of the app run the test suite
 - if you added functionality add a test for it
+- if you edited parts of the app run the test suite
+- do not test deployment if you havent changed it
+- do not test python environment or availability if you havent changed it
 - after you added or changed functionality write a git commit
