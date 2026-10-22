@@ -289,25 +289,3 @@ details.zf-details > summary {
 .btn-check:checked + .zf-btn-vacation { background: var(--zf-vacation); color: #fff; border-color: var(--zf-vacation); }
 .zf-btn-sick { border-color: var(--zf-sick); color: var(--zf-sick); }
 .btn-check:checked + .zf-btn-sick { background: var(--zf-sick); color: #fff; border-color: var(--zf-sick); }
-
-/* ---------- Hinweis vor automatischem Abmelden ---------- */
-
-.zf-idle-warning {
-  position: fixed;
-  left: 50%;
-  bottom: 1.5rem;
-  transform: translateX(-50%);
-  z-index: 1080;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1rem;
-  max-width: calc(100% - 2rem);
-  padding: 1rem 1.25rem;
-  background: #1f2937;
-  color: #fff;
-  border-radius: var(--zf-radius);
-  box-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .25);
-  font-size: 1.05rem;
-}
-.zf-idle-warning[hidden] { display: none; }

@@ -1,6 +1,6 @@
 # 0019 – Ein Eintragsformular mit Kalender statt Einzel- und Sammeleintrag
 
-- **Status:** Vorgeschlagen
+- **Status:** Akzeptiert
 - **Datum:** 2026-10-22
 - **Betrifft:** ERF-7, ERF-8, ERF-9, ERF-16
 

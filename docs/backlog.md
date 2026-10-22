@@ -28,3 +28,7 @@ und B-7 Schemaänderungen brauchen.
 - Urlaubskontingent und Resturlaub
 - CSV-/PDF-Export
 - Schichten über Mitternacht
+- Natives Uhrzeitfeld (`<input type="time">`, 15-min-Schritte) statt
+  Stunden-/Minuten-Auswahl, falls die App später auf Tablets genutzt wird;
+  braucht eine Anpassung von ERF-5 (Zeiten außerhalb des Rasters beim
+  Bearbeiten)
