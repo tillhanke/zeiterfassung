@@ -22,7 +22,7 @@
             <span class="zf-who"><span class="zf-avatar" aria-hidden="true">A</span>Verwaltung</span>
           {% elif active_user %}
             <span class="zf-who">
-              <span class="zf-avatar" aria-hidden="true">{{ active_user.name[:1] }}</span>{{ active_user.name }}
+              <span class="zf-avatar" aria-hidden="true">{{ initials.get(active_user.name, active_user.name[:1]) }}</span>{{ active_user.name }}
             </span>
           {% endif %}
           <form method="post" action="{{ url_for('switch') }}">

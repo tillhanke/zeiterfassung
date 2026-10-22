@@ -13,7 +13,7 @@
       <form method="post" action="{{ url_for('switch') }}">
         <input type="hidden" name="identity" value="user:{{ u.id }}" />
         <button class="zf-tile{% if running_since %} is-running{% endif %}" type="submit">
-          <span class="zf-avatar" aria-hidden="true">{{ u.name[:1] }}</span>
+          <span class="zf-avatar" aria-hidden="true">{{ initials.get(u.name, u.name[:1]) }}</span>
           <span>{{ u.name }}</span>
           {% if running_since %}
             <span class="zf-tile-status">● eingestempelt seit {{ running_since.strftime('%H:%M') }}</span>

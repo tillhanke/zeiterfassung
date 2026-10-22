@@ -482,6 +482,37 @@ def format_long_date(d: date) -> str:
     return f"{WOCHENTAGE[d.weekday()]}, {d.day}. {MONATE[d.month - 1]} {d.year}"
 
 
+def avatar_initials(names: list[str], max_len: int = 3) -> dict[str, str]:
+    """Kürzel für die runden Avatare (UI-8), eindeutig innerhalb von ``names``.
+
+    Mehrteilige Namen ("Anna Maria") ergeben die Anfangsbuchstaben aller
+    Teile ("AM"), einteilige den ersten Buchstaben. Kollidieren Kürzel,
+    werden sie um weitere Buchstaben verlängert ("Ma", "Mi"), bis sie sich
+    unterscheiden oder ``max_len`` erreicht ist.
+    """
+    def candidate(name: str, extra: int) -> str:
+        parts = name.split() or ["?"]
+        if len(parts) == 1:
+            return parts[0][: 1 + extra].capitalize()
+        # Mehrteilig: Initialen, bei Kollision den letzten Teil verlängern.
+        head = "".join(p[0].upper() for p in parts[:-1])[:max_len - 1]
+        return head + parts[-1][: 1 + extra].capitalize()
+
+    result = {n: candidate(n, 0) for n in names}
+    for extra in range(1, max_len):
+        counts: dict[str, int] = {}
+        for code in result.values():
+            counts[code] = counts.get(code, 0) + 1
+        clashing = [n for n, code in result.items() if counts[code] > 1]
+        if not clashing:
+            break
+        for n in clashing:
+            code = candidate(n, extra)
+            if len(code) <= max_len:
+                result[n] = code
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Jahresübersicht
 # ---------------------------------------------------------------------------

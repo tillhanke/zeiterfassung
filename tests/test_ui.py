@@ -82,6 +82,35 @@ class TestStartPage:
         assert "Alice" in html
 
 
+class TestAvatarInitials:
+    @pytest.mark.parametrize(
+        "names, expected",
+        [
+            (["Alice", "Bob"], {"Alice": "A", "Bob": "B"}),
+            (["Maria", "Michaela"], {"Maria": "Ma", "Michaela": "Mi"}),
+            (["Anna Maria", "Bob"], {"Anna Maria": "AM", "Bob": "B"}),
+            (["Anna Maria", "Anna Meier"], {"Anna Maria": "AMa", "Anna Meier": "AMe"}),
+            (["Maria", "Marta", "Bob"], {"Maria": "Mar", "Marta": "Mar", "Bob": "B"}),
+        ],
+    )
+    def test_initials(self, names, expected):
+        """UI-8: Initialen aller Namensteile, bei Kollision verlängert, max. 3 Zeichen."""
+        assert logic.avatar_initials(names) == expected
+
+    def test_start_page_and_topbar_use_initials(self, client, app):
+        """UI-8: Startseite und Topbar zeigen eindeutige Kürzel."""
+        from tests.conftest import _create_user
+        with app.app_context():
+            mid = _create_user("Maria", 40.0)
+            _create_user("Michaela", 40.0)
+        html = client.get("/").data.decode()
+        assert 'aria-hidden="true">Ma</span>' in html
+        assert 'aria-hidden="true">Mi</span>' in html
+        client.post("/switch", data={"identity": f"user:{mid}"})
+        html = client.get(f"/user/{mid}").data.decode()
+        assert 'aria-hidden="true">Ma</span>Maria' in html
+
+
 class TestTodayCard:
     def test_today_card_when_other_month_shown(self, client, login_alice, freeze_now):
         """UI-4: Karte „Heute“ mit Stempeln auch beim Blättern."""

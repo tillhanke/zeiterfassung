@@ -200,6 +200,7 @@ def register_context(app: Flask) -> None:
             users = []
         return {
             "all_users": users,
+            "initials": logic.avatar_initials([u.name for u in users]),
             "active_identity": current_identity(),
             "active_user": current_user(),
             "today": date.today(),
