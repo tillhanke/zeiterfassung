@@ -54,6 +54,22 @@ class TestStartPage:
         assert html.count("is-running") == 1
         assert "eingestempelt seit 08:15" in html
 
+    def test_brand_links_to_start_page(self, client, login_alice):
+        """UI-3: „Zeiterfassung“ oben links führt immer zur Startseite."""
+        html = client.get(f"/user/{login_alice}").data.decode()
+        assert '<a class="navbar-brand" href="/">Zeiterfassung</a>' in html
+
+    def test_admin_topbar_without_overview_link(self, client, login_admin):
+        """UI-3: Kein „Übersicht“-Link in der Topbar (führte auf dieselbe Seite)."""
+        html = client.get("/admin").data.decode()
+        assert ">Übersicht</a>" not in html
+        assert ">Abmelden</button>" in html
+
+    def test_admin_new_user_above_settings(self, client, login_admin):
+        """UI-6: „Neue Nutzerin anlegen“ steht vor den Einstellungen."""
+        html = client.get("/admin").data.decode()
+        assert html.index("Neue Nutzerin anlegen") < html.index("Einstellungen")
+
     def test_no_identity_dropdown_in_topbar(self, client, login_alice):
         """UI-3: Topbar zeigt die Identität und „Abmelden“, keine Auswahl."""
         html = client.get(f"/user/{login_alice}").data.decode()

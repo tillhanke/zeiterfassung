@@ -18,7 +18,9 @@ Wir gestalten die Oberfläche für Touch und schnelle Abläufe:
 
 - Startseite mit großen Namenskacheln, Verwaltung als unauffälliger Link.
 - Topbar zeigt nur die aktive Identität und „Abmelden"; gewechselt wird
-  über die Startseite.
+  über die Startseite. „Zeiterfassung" oben links führt immer zur
+  Namensauswahl, auch mit aktiver Identität (kein Weiterleiten zum
+  eigenen Dashboard).
 - Das Dashboard beginnt mit einer Karte „Heute" mit großem Stempel-Button
   und dem Gesamtsaldo; die Monatsliste folgt darunter.
 
@@ -33,5 +35,7 @@ Wir gestalten die Oberfläche für Touch und schnelle Abläufe:
 ## Konsequenzen
 
 - Admin wechselt über „Abmelden" → „Verwaltung" statt über die Topbar.
+- Wer die App mit noch aktiver Identität öffnet, sieht die Namensauswahl
+  und muss den eigenen Namen erneut antippen.
 - Spätere Bildschirme (Eintragsformular, Admin) folgen denselben Mustern:
   große Schaltflächen, eine Hauptaktion pro Bildschirm.

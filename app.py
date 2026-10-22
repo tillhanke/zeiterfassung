@@ -363,12 +363,8 @@ def before_start_error(user: User, d: date) -> Optional[str]:
 def register_routes(app: Flask) -> None:
     @app.route("/")
     def index():
-        ident = current_identity()
-        if ident == "admin":
-            return redirect(url_for("admin"))
-        user = current_user()
-        if user:
-            return redirect(url_for("user_dashboard", user_id=user.id))
+        # Immer die Namensauswahl, auch mit aktiver Identität (UI-3): am
+        # gemeinsamen Gerät führt „Zeiterfassung“ oben links zurück zur Auswahl.
         users = User.query.filter_by(active=True).order_by(User.name).all()
         # Wer gerade eingestempelt ist, zeigt die Kachel an (UI-3).
         running = {

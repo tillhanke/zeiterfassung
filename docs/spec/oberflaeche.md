@@ -28,8 +28,11 @@ Tablet, kioskartig).
 - **UI-3** – Die Startseite zeigt die aktiven Nutzerinnen als große
   Kacheln; eine Kachel zeigt an, wenn die Nutzerin heute gerade
   eingestempelt ist. Der Zugang zur Verwaltung ist ein unauffälliger Link
-  darunter. Die Topbar zeigt die aktive Identität und „Abmelden" (zurück zur
-  Startseite), aber keine Auswahlliste. → ADR-0018
+  darunter. Die Startseite zeigt immer die Namensauswahl, auch wenn bereits
+  eine Identität aktiv ist; „Zeiterfassung" oben links führt jederzeit
+  dorthin. Die Topbar zeigt die aktive Identität und „Abmelden" (Identität
+  verwerfen, zurück zur Startseite), aber keine Auswahlliste und keine
+  weiteren Navigationslinks. → ADR-0018
 - **UI-4** – Das Dashboard einer Nutzerin beginnt mit der Karte „Heute"
   (Status, laufende Zeit, „Anfang"/„Ende") und dem aktuellen Gesamtsaldo.
   Die Karte zeigt immer den heutigen Tag, auch wenn ein anderer Monat
@@ -38,6 +41,8 @@ Tablet, kioskartig).
   In der Tagesliste wird nicht gestempelt.
 - **UI-5** – Sieht Admin das Dashboard einer Nutzerin, steht darüber eine
   Hinweisleiste mit ihrem Namen und einem Link zurück zur Übersicht.
+- **UI-6** – Das Admin-Panel ist von oben nach unten nach Häufigkeit
+  geordnet: Nutzerinnen, „Neue Nutzerin anlegen", Einstellungen.
 
 ## Nicht im Umfang
 

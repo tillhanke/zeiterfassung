@@ -95,26 +95,6 @@
 </div>
 
 <div class="card mb-4">
-  <div class="card-header">Einstellungen</div>
-  <div class="card-body">
-    <form method="post" action="{{ url_for('admin_settings') }}"
-          class="d-flex flex-wrap align-items-center gap-3">
-      <div class="form-check form-switch mb-0">
-        <input class="form-check-input" type="checkbox" role="switch" id="yearly_reset"
-               name="yearly_reset" value="1" {% if yearly_reset %}checked{% endif %} />
-        <label class="form-check-label" for="yearly_reset">
-          Saldo zum Jahreswechsel auf 0 setzen
-        </label>
-      </div>
-      <button class="btn btn-sm btn-outline-primary" type="submit">Speichern</button>
-      <div class="form-text w-100 mt-0">
-        Aus: Über- und Minusstunden werden ins neue Jahr übernommen.
-      </div>
-    </form>
-  </div>
-</div>
-
-<div class="card">
   <div class="card-header">Neue Nutzerin anlegen</div>
   <div class="card-body">
     <form method="post" action="{{ url_for('admin_create_user') }}" class="row g-2">
@@ -142,6 +122,26 @@
       <div class="col-12 form-text">
         Optional: Ab dem Startdatum wird gerechnet, frühere Einträge zählen nicht.
         Der Übertrag (Überstunden, negativ = Minusstunden) ist der Saldo zu Beginn des Startdatums.
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">Einstellungen</div>
+  <div class="card-body">
+    <form method="post" action="{{ url_for('admin_settings') }}"
+          class="d-flex flex-wrap align-items-center gap-3">
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="yearly_reset"
+               name="yearly_reset" value="1" {% if yearly_reset %}checked{% endif %} />
+        <label class="form-check-label" for="yearly_reset">
+          Saldo zum Jahreswechsel auf 0 setzen
+        </label>
+      </div>
+      <button class="btn btn-sm btn-outline-primary" type="submit">Speichern</button>
+      <div class="form-text w-100 mt-0">
+        Aus: Über- und Minusstunden werden ins neue Jahr übernommen.
       </div>
     </form>
   </div>
