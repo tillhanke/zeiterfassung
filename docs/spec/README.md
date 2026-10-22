@@ -18,13 +18,13 @@ Code oder in der Spec. Er wird bewusst aufgelöst, nicht stillschweigend.
 Verhalten wird als nummerierte Regeln formuliert:
 
 ```markdown
-- **SALDO-3** – Leere Werktage nach dem heutigen Tag erzeugen kein Minus.
+- **SALDO-5** – Ein leerer Werktag bis einschließlich heute zählt mit vollem Soll.
 ```
 
 - IDs sind **stabil**: Sie werden nie umnummeriert oder wiederverwendet.
   Neue Regeln bekommen die nächste freie Nummer.
 - Entfällt eine Regel, bleibt die ID stehen und wird durchgestrichen
-  markiert: `- ~~**SALDO-4**~~ – entfallen, siehe ADR-0007.`
+  markiert: `- ~~**SALDO-4**~~ – entfallen, siehe ADR-NNNN.`
 - Eine Regel ist eine prüfbare Aussage. Wo möglich mit konkretem Beispiel
   (Eingabe → Ergebnis).
 - Formulierung aus Sicht der Fachlichkeit, nicht der Implementierung
@@ -33,8 +33,11 @@ Verhalten wird als nummerierte Regeln formuliert:
 ## Verknüpfung mit Tests und ADRs
 
 - Tests, die eine Regel absichern, nennen die ID im Docstring:
-  `"""SALDO-3: zukünftige leere Tage zählen nicht."""`
-  Damit findet `grep -rn SALDO-3` Spec, Tests und Code.
+  `"""SALDO-5: leerer Werktag bis heute zählt mit vollem Soll."""`
+  Damit findet `grep -rn SALDO-5` Spec, Tests und Code.
+- Ist eine Regel beschlossen, aber noch nicht umgesetzt, steht darunter
+  `*(offen: <wie es derzeit ist>)*` und im [Backlog](../backlog.md) gibt es
+  einen Eintrag dazu. Mit der Umsetzung wird die Markierung entfernt.
 - Begründungen stehen nicht in der Spec, sondern im ADR, auf das die Regel
   verweist (`→ ADR-0004`).
 
@@ -46,4 +49,8 @@ Eine Verhaltensänderung ändert Spec, Code und Tests im selben Commit.
 
 | Kürzel | Datei | Inhalt |
 | ------ | ----- | ------ |
-| –      | –     | noch keine Bereiche angelegt |
+| ERF    | [erfassung.md](erfassung.md) | Einträge, Sammeleintrag, Stempeln, Rundung |
+| PAUSE  | [pausen.md](pausen.md) | Pausenabzug nach ArbZG §4 |
+| SALDO  | [saldo.md](saldo.md) | Soll, Ist, Saldo, Startdatum, Jahreswechsel |
+| FEIER  | [feiertage.md](feiertage.md) | gesetzliche Feiertage |
+| NUTZ   | [nutzerinnen.md](nutzerinnen.md) | Zugang, Timeout, Verwaltung, Firmeneinstellungen |

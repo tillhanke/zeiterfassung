@@ -201,10 +201,8 @@ Die Tests prüfen sowohl die Geschäftslogik (Pausenabzug, Feiertage,
 Saldo-Stichtag) als auch das Verhalten der Routen (Berechtigungen,
 Validierung, atomare Bulk-Operationen, Überschreib-Logik).
 
-## Bewusst ausgeklammert
+## Spezifikation, Entscheidungen, Backlog
 
-- Echte Authentifizierung (Login mit Passwort).
-- Feiertage anderer Bundesländer (aktuell nur Sachsen-Anhalt).
-- Urlaubskontingent / Resturlaub.
-- CSV/PDF-Export.
-- Über-Mitternacht-Schichten (Arbeitstag muss vor 24:00 enden).
+- [`docs/spec/`](docs/spec/README.md) – verbindliches Verhalten als nummerierte Regeln
+- [`docs/decisions/`](docs/decisions/README.md) – Architecture Decision Records
+- [`docs/backlog.md`](docs/backlog.md) – beschlossene, noch offene Änderungen und Ideen

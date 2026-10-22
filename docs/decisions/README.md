@@ -43,4 +43,18 @@ ursprünglich getroffen wurden (soweit bekannt, z. B. aus der Git-Historie).
 
 | Nr. | Titel | Status |
 | --- | ----- | ------ |
-| [0001](0001-adrs-und-spec-verwenden.md) | ADRs und Spec im Repository verwenden | Akzeptiert |
+| [0001](0001-adrs-und-spec-verwenden.md) | Spezifikation und Entscheidungen als Markdown im Repository | Akzeptiert |
+| [0002](0002-kein-login-identitaetsauswahl.md) | Kein Login: Identitätsauswahl mit Inaktivitäts-Timeout | Akzeptiert |
+| [0003](0003-pausenabzug-nach-tagessumme.md) | Pausenabzug nach Tagessumme mit Anrechnung von Lücken | Akzeptiert |
+| [0004](0004-tagessoll-gleichmaessig.md) | Tagessoll gleichmäßig: Wochenstunden / 5 | Akzeptiert |
+| [0005](0005-arbeit-ohne-soll-ist-ueberstunde.md) | Arbeit an Wochenende und Feiertag zählt als Überstunden | Akzeptiert |
+| [0006](0006-saldo-bis-jetzt.md) | Saldo zählt bis jetzt: keine Zukunft, offene Fenster live | Akzeptiert |
+| [0007](0007-startdatum-mit-uebertrag.md) | Startdatum mit Übertrag, frühere Einträge bleiben erhalten | Akzeptiert |
+| [0008](0008-nullstellung-jahreswechsel.md) | Nullstellung zum Jahreswechsel als Firmeneinstellung | Akzeptiert |
+| [0009](0009-rundung-firmeneinstellung.md) | Rundung beim Stempeln als Firmeneinstellung | Akzeptiert |
+| [0010](0010-offene-fenster-um-mitternacht.md) | Offene Zeitfenster werden um Mitternacht verworfen | Akzeptiert |
+| [0011](0011-bundesland-einstellbar.md) | Bundesland für Feiertage als Firmeneinstellung | Akzeptiert |
+| [0012](0012-sqlite-mit-alembic.md) | SQLite mit Alembic-Migrationen | Akzeptiert |
+| [0013](0013-deaktivieren-statt-loeschen.md) | Nutzerinnen deaktivieren statt löschen | Akzeptiert |
+| [0014](0014-deployment-docker-und-systemd.md) | Deployment per Docker oder systemd | Akzeptiert |
+| [0015](0015-wochenstunden-ohne-grenzen.md) | Wochenstunden ab 0, ohne Obergrenze | Akzeptiert |

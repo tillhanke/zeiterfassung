@@ -38,6 +38,7 @@ flask --app app init-db         # Tabellen anlegen (idempotent)
   generischen Femininum („Nutzerin", „Nutzerinnen").
 - Commits im Conventional-Commits-Stil: `feat(bereich): Beschreibung`, `fix: …`, `docs: …`.
 - Feature-Branches: `feature/<kurzer-deutscher-name>`.
+- Keine Selbsttest-`assert`s auf Modulebene; Prüfungen gehören nach `tests/`.
 
 ## Spezifikation und Entscheidungen
 
@@ -47,6 +48,9 @@ Bevor du Verhalten änderst, lies die passenden Dokumente:
   verbindliches Verhalten als nummerierte Regeln (z. B. `SALDO-3`).
 - [`docs/decisions/`](docs/decisions/README.md) – **warum** es so ist:
   Architecture Decision Records (ADRs), unveränderlich.
+- [`docs/backlog.md`](docs/backlog.md) – beschlossene, noch offene Änderungen.
+  Spec-Regeln mit `*(offen: …)*` sind beschlossen, aber noch nicht umgesetzt.
+  Der Code verhält sich dort noch anders, das ist kein Fehler.
 
 Regeln:
 
