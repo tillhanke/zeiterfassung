@@ -1,6 +1,6 @@
 # 0018 – Oberfläche für ein gemeinsames Gerät (Kiosk)
 
-- **Status:** Vorgeschlagen
+- **Status:** Akzeptiert
 - **Datum:** 2026-10-22
 - **Betrifft:** NUTZ-1, UI-3, UI-4
 
