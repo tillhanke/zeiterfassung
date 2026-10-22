@@ -161,6 +161,10 @@ zeiterf/
 │   ├── zeiterfassung.service  # systemd-Unit-Template (gehärtet)
 │   └── install-systemd.sh     # Provisionierung Linux-Server
 ├── README.md
+├── AGENTS.md              # Arbeitsanweisungen für Coding-Agenten (CLAUDE.md bindet sie ein)
+├── docs/
+│   ├── spec/              # verbindliches Verhalten, nummerierte Regeln
+│   └── decisions/         # ADRs: warum etwas so entschieden wurde
 ├── templates/
 │   ├── base.html
 │   ├── index.html
