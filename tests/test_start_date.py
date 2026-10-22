@@ -46,7 +46,7 @@ class TestMonthSummary:
         assert sm.opening_balance == 12.5
         assert sm.saldo == 12.5 - 8.0  # Übertrag minus leerer Starttag
         start_day = next(d for d in sm.days if d.date == date(2026, 5, 13))
-        assert start_day.note.startswith("Übertrag +12.50 h")
+        assert start_day.note.startswith("Übertrag +12:30 h")
 
     def test_negative_opening_balance(self):
         u = _user(date(2026, 5, 13), -4.0)
@@ -216,7 +216,7 @@ class TestEntriesBeforeStart:
         r = client.get(f"/user/{login_alice}?year=2026&month=5")
         assert r.status_code == 200
         assert "Eintrag zählt nicht".encode() in r.data
-        assert "Übertrag +2.00 h".encode() in r.data
+        assert "Übertrag +2:00 h".encode() in r.data
         with app.app_context():
             assert WorkDay.query.count() == 1
 

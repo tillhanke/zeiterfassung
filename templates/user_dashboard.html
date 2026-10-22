@@ -1,211 +1,240 @@
 {% extends "base.html" %}
 {% set MONATE = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'] %}
-{% set WTAGE = ['Mo','Di','Mi','Do','Fr','Sa','So'] %}
 {% block title %}{{ user.name }} – {{ MONATE[month-1] }} {{ year }}{% endblock %}
+{# Tagesart als Pille (Farbe + Text); in der Tabelle ab lg eigene Spalte, darunter unter dem Datum. #}
+{% macro kind_pill(d) -%}
+  {% if d.kind == 'work' %}<span class="zf-kind work">Arbeit</span>
+  {%- elif d.kind == 'vacation' %}<span class="zf-kind vacation">Urlaub</span>
+  {%- elif d.kind == 'sick' %}<span class="zf-kind sick">Krank</span>
+  {%- elif d.kind == 'holiday' %}<span class="zf-kind holiday">Feiertag</span>
+  {%- elif d.kind == 'empty' %}<span class="zf-kind empty">fehlt</span>
+  {%- elif d.kind == 'weekend' %}<span class="zf-kind off">Wochenende</span>
+  {%- elif d.kind == 'future' %}<span class="zf-kind off">noch offen</span>
+  {%- elif d.kind == 'inactive' %}<span class="zf-kind off">vor Start</span>
+  {%- endif %}
+{%- endmacro %}
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-3">
+{% if is_admin %}
+  <div class="zf-admin-bar d-flex flex-wrap align-items-center gap-2 mb-3" role="note">
+    <span>
+      <strong>Admin-Ansicht</strong> · Du siehst die Daten von <strong>{{ user.name }}</strong>
+      und kannst Einträge korrigieren.
+    </span>
+    <a class="ms-auto" href="{{ url_for('admin') }}">← Zur Übersicht</a>
+  </div>
+{% endif %}
+
+{% if stale_open %}
+  <div class="alert alert-warning d-flex flex-wrap align-items-center gap-3" role="alert">
+    <span>
+      <strong>Am {{ stale_open.date|tag }} wurde nicht ausgestempelt</strong>
+      (Anfang {{ stale_open.start_time.strftime('%H:%M') }}). Bitte die Endzeit nachtragen.
+    </span>
+    <a class="btn btn-warning ms-auto"
+       href="{{ url_for('entry_form', user_id=user.id, date=stale_open.date.isoformat()) }}">Jetzt nachtragen</a>
+  </div>
+{% endif %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
   <div>
     <h1 class="h3 mb-0">{{ user.name }}</h1>
     <small class="text-muted">
-      {{ user.weekly_hours }} h/Woche · Soll/Tag {{ '%.2f'|format(user.daily_target) }} h
+      {{ user.weekly_hours|zahl }} h/Woche · Soll/Tag {{ user.daily_target|hm }} h
       {% if user.start_date %}
-        · Start {{ user.start_date.isoformat() }} mit Übertrag {{ '%+.2f'|format(user.start_balance) }} h
+        · Start {{ user.start_date|datum }} mit Übertrag {{ user.start_balance|hm_signed }} h
       {% endif %}
     </small>
   </div>
-  <div class="d-flex gap-2">
-    <a class="btn btn-outline-primary" href="{{ url_for('bulk_entry_form', user_id=user.id) }}">
-      + Mehrere Tage
-    </a>
-    <a class="btn btn-primary" href="{{ url_for('entry_form', user_id=user.id, date=today.isoformat()) }}">
-      + Tag eintragen
-    </a>
-  </div>
-</div>
-
-<div class="card mb-3 running-total">
-  <div class="card-body py-2 d-flex flex-wrap align-items-baseline gap-2">
-    <span class="text-muted small">Aktueller Gesamtsaldo (seit {{ running_since.isoformat() }})</span>
-    <strong class="fs-5 {{ 'month-saldo-positive' if running_total >= 0 else 'month-saldo-negative' }}">
-      {{ '%+.2f'|format(running_total) }} h
-    </strong>
-    <span class="text-muted small">
-      {% if running_total >= 0 %}im Plus{% else %}im Minus{% endif %}
-    </span>
-  </div>
-</div>
-
-<div class="d-flex justify-content-between align-items-center mb-2">
-  <a class="btn btn-outline-secondary btn-sm"
-     href="{{ url_for('user_dashboard', user_id=user.id, year=prev_year, month=prev_month) }}">
-    « {{ MONATE[prev_month-1] }} {{ prev_year }}
-  </a>
-  <h2 class="h5 mb-0">{{ MONATE[month-1] }} {{ year }}</h2>
-  <a class="btn btn-outline-secondary btn-sm"
-     href="{{ url_for('user_dashboard', user_id=user.id, year=next_year, month=next_month) }}">
-    {{ MONATE[next_month-1] }} {{ next_year }} »
+  <a class="btn btn-primary btn-lg" href="{{ url_for('entry_form', user_id=user.id) }}">
+    + Eintragen
   </a>
 </div>
 
-<div class="row g-3 mb-3">
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body">
-        <div class="text-muted small">Soll</div>
-        <div class="fs-4">{{ '%.2f'|format(summary.target_hours) }} h</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body">
-        <div class="text-muted small">Ist</div>
-        <div class="fs-4">{{ '%.2f'|format(summary.actual_hours) }} h</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body">
-        <div class="text-muted small">Saldo</div>
-        <div class="fs-4 {{ 'month-saldo-positive' if summary.saldo >= 0 else 'month-saldo-negative' }}">
-          {{ '%+.2f'|format(summary.saldo) }} h
+{# ---------- Heute + Gesamtsaldo ---------- #}
+<div class="row g-3 mb-4">
+  <div class="col-lg-7">
+    <section class="card h-100" aria-labelledby="todayHeading">
+      <div class="card-body p-4 d-flex flex-column gap-3">
+        {% set ns = namespace(open_start=none) %}
+        {% for s, e in today_day.windows %}{% if e is none %}{% set ns.open_start = s %}{% endif %}{% endfor %}
+
+        <div>
+          <div class="zf-today-date" id="todayHeading">Heute · {{ today|langdatum }}</div>
+          {% if ns.open_start %}
+            <div class="zf-today-state text-plus">● Eingestempelt seit {{ ns.open_start.strftime('%H:%M') }}</div>
+            <div class="zf-timer" id="liveTimer" data-start="{{ ns.open_start.strftime('%H:%M') }}"
+                 aria-live="off">–</div>
+            <div class="text-muted small">im laufenden Zeitfenster</div>
+          {% else %}
+            <div class="zf-today-state">Nicht eingestempelt</div>
+          {% endif %}
         </div>
-        {% if summary.opening_balance %}
-          <div class="text-muted small">inkl. Übertrag {{ '%+.2f'|format(summary.opening_balance) }} h</div>
+
+        {% if today_day.windows %}
+          <div class="small">
+            <span class="text-muted">Heute erfasst:</span>
+            {% for s, e in today_day.windows %}
+              {{ s.strftime('%H:%M') }}–{{ e.strftime('%H:%M') if e else '…' }}{% if not loop.last %} · {% endif %}
+            {% endfor %}
+            {% if today_day.net %}
+              <span class="text-muted">· netto</span> {{ today_day.net|hm }} h
+            {% endif %}
+          </div>
         {% endif %}
+
+        <div class="mt-auto">
+          {% if clock_block %}
+            <div class="text-muted">{{ clock_block }}</div>
+          {% elif today_day.running %}
+            <form method="post" action="{{ url_for('clock_end', user_id=user.id) }}">
+              <button class="btn btn-danger btn-clock" type="submit">Ende</button>
+            </form>
+          {% else %}
+            <form method="post" action="{{ url_for('clock_start', user_id=user.id) }}">
+              <button class="btn btn-success btn-clock" type="submit">Anfang</button>
+            </form>
+          {% endif %}
+        </div>
       </div>
-    </div>
+    </section>
   </div>
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body">
-        <div class="text-muted small">Urlaub / Krank</div>
-        <div class="fs-4">{{ summary.vacation_days }} / {{ summary.sick_days }}</div>
+
+  <div class="col-lg-5">
+    <section class="card h-100 running-total">
+      <div class="card-body p-4">
+        <div class="zf-stat-label">Aktueller Gesamtsaldo</div>
+        <div class="zf-balance {{ 'text-plus' if running_total >= 0 else 'text-minus' }}">
+          {{ running_total|hm_signed }} h
+        </div>
+        <div class="text-muted small mb-3">
+          {% if running_total >= 0 %}Überstunden{% else %}Minusstunden{% endif %}
+          · Stand heute, gerechnet seit {{ running_since|datum }}
+        </div>
+
+        <details class="zf-details">
+          <summary>Jahr {{ year_summary.year }}</summary>
+          <dl class="row small mt-2 mb-0">
+            <dt class="col-6 fw-normal text-muted">Soll</dt>
+            <dd class="col-6 text-end mb-1">{{ year_summary.target_hours|hm }} h</dd>
+            <dt class="col-6 fw-normal text-muted">Ist</dt>
+            <dd class="col-6 text-end mb-1">{{ year_summary.actual_hours|hm }} h</dd>
+            <dt class="col-6 fw-normal text-muted">Saldo</dt>
+            <dd class="col-6 text-end mb-1 {{ 'text-plus' if year_summary.saldo >= 0 else 'text-minus' }}">
+              {{ year_summary.saldo|hm_signed }} h
+            </dd>
+            {% if year_summary.opening_balance %}
+              <dt class="col-6 fw-normal text-muted">davon Übertrag</dt>
+              <dd class="col-6 text-end mb-1">{{ year_summary.opening_balance|hm_signed }} h</dd>
+            {% endif %}
+            {% if year_summary.carry_over %}
+              <dt class="col-6 fw-normal text-muted">davon Vorjahre</dt>
+              <dd class="col-6 text-end mb-1">{{ year_summary.carry_over|hm_signed }} h</dd>
+            {% endif %}
+            <dt class="col-6 fw-normal text-muted">Urlaub / Krank</dt>
+            <dd class="col-6 text-end mb-1">{{ year_summary.vacation_days }} / {{ year_summary.sick_days }}</dd>
+            <dt class="col-6 fw-normal text-muted">Arbeitstage</dt>
+            <dd class="col-6 text-end mb-0">{{ year_summary.worked_days }}</dd>
+          </dl>
+        </details>
       </div>
-    </div>
+    </section>
   </div>
 </div>
 
-<div class="card mb-4 year-summary">
-  <div class="card-body py-3">
-    <div class="d-flex flex-wrap align-items-center gap-3">
-      <div class="me-auto">
-        <div class="text-muted small">Jahresgesamt {{ year_summary.year }}</div>
-      </div>
+{# ---------- Monat ---------- #}
+<section class="card mb-4">
+  <div class="card-header bg-white p-3">
+    <div class="d-flex flex-wrap align-items-center gap-2 zf-month-nav">
+      <a class="btn btn-outline-secondary"
+         href="{{ url_for('user_dashboard', user_id=user.id, year=prev_year, month=prev_month) }}"
+         aria-label="Vorheriger Monat: {{ MONATE[prev_month-1] }} {{ prev_year }}">
+        ‹ {{ MONATE[prev_month-1] }} {{ prev_year }}
+      </a>
+      <h2 class="h5 mb-0 mx-2">{{ MONATE[month-1] }} {{ year }}</h2>
+      <a class="btn btn-outline-secondary"
+         href="{{ url_for('user_dashboard', user_id=user.id, year=next_year, month=next_month) }}"
+         aria-label="Nächster Monat: {{ MONATE[next_month-1] }} {{ next_year }}">
+        {{ MONATE[next_month-1] }} {{ next_year }} ›
+      </a>
+      {% if (year, month) != (today.year, today.month) %}
+        <a class="btn btn-link" href="{{ url_for('user_dashboard', user_id=user.id) }}">Zum aktuellen Monat</a>
+      {% endif %}
+    </div>
+    <div class="d-flex flex-wrap gap-4 mt-3">
+      <div><div class="zf-stat-label">Soll</div><div class="zf-stat-value">{{ summary.target_hours|hm }} h</div></div>
+      <div><div class="zf-stat-label">Ist</div><div class="zf-stat-value">{{ summary.actual_hours|hm }} h</div></div>
       <div>
-        <span class="text-muted small">Soll </span>
-        <strong>{{ '%.2f'|format(year_summary.target_hours) }} h</strong>
+        <div class="zf-stat-label">Saldo Monat</div>
+        <div class="zf-stat-value {{ 'text-plus' if summary.saldo >= 0 else 'text-minus' }}">
+          {{ summary.saldo|hm_signed }} h
+          {% if summary.opening_balance %}
+            <small class="text-muted fw-normal">(inkl. Übertrag {{ summary.opening_balance|hm_signed }} h)</small>
+          {% endif %}
+        </div>
       </div>
-      <div>
-        <span class="text-muted small">Ist </span>
-        <strong>{{ '%.2f'|format(year_summary.actual_hours) }} h</strong>
-      </div>
-      <div>
-        <span class="text-muted small">Saldo </span>
-        <strong class="{{ 'month-saldo-positive' if year_summary.saldo >= 0 else 'month-saldo-negative' }}">
-          {{ '%+.2f'|format(year_summary.saldo) }} h
-        </strong>
-        {% if year_summary.opening_balance %}
-          <span class="text-muted small">(inkl. Übertrag {{ '%+.2f'|format(year_summary.opening_balance) }} h)</span>
-        {% endif %}
-        {% if year_summary.carry_over %}
-          <span class="text-muted small">(inkl. Vorjahre {{ '%+.2f'|format(year_summary.carry_over) }} h)</span>
-        {% endif %}
-      </div>
-      <div>
-        <span class="text-muted small">Urlaub / Krank </span>
-        <strong>{{ year_summary.vacation_days }} / {{ year_summary.sick_days }}</strong>
-      </div>
-      <div>
-        <span class="text-muted small">Arbeitstage </span>
-        <strong>{{ year_summary.worked_days }}</strong>
-      </div>
+      <div><div class="zf-stat-label">Urlaub</div><div class="zf-stat-value">{{ summary.vacation_days }} {{ 'Tag' if summary.vacation_days == 1 else 'Tage' }}</div></div>
+      <div><div class="zf-stat-label">Krank</div><div class="zf-stat-value">{{ summary.sick_days }} {{ 'Tag' if summary.sick_days == 1 else 'Tage' }}</div></div>
     </div>
   </div>
-</div>
 
-<div class="card">
   <div class="table-responsive">
-    <table class="table table-sm align-middle mb-0">
+    <table class="table align-middle mb-0 zf-days">
       <thead class="table-light">
         <tr>
-          <th>Datum</th>
           <th>Tag</th>
-          <th>Typ</th>
-          <th class="text-end">Start</th>
-          <th class="text-end">Ende</th>
-          <th class="text-end">Diff</th>
-          <th>Notiz</th>
-          <th class="text-end">Aktion</th>
+          <th class="d-none d-lg-table-cell">Art</th>
+          <th>Zeiten</th>
+          <th class="text-end">Ist</th>
+          <th class="text-end">± Soll</th>
+          <th class="d-none d-lg-table-cell">Hinweis</th>
+          <th class="text-end"><span class="visually-hidden">Aktionen</span></th>
         </tr>
       </thead>
       <tbody>
         {% for d in summary.days %}
-          <tr class="day-row {{ d.kind }}{% if d.date == today %} today{% endif %}"
-              {% if d.date == today %}id="today-row"{% endif %}>
+          <tr class="day-row {{ d.kind }}{% if d.date == today %} today{% endif %}">
             <td>
-              {{ d.date.isoformat() }}
-              {% if d.date == today %}
-                <span class="badge bg-dark ms-1">heute</span>
-              {% endif %}
+              {{ d.date|tag }}
+              {% if d.date == today %}<span class="badge text-bg-primary ms-1">heute</span>{% endif %}
+              <div class="d-lg-none mt-1">{{ kind_pill(d) }}</div>
             </td>
-            <td>{{ WTAGE[d.weekday] }}</td>
+            <td class="d-none d-lg-table-cell">{{ kind_pill(d) }}</td>
             <td>
-              {% if d.kind == 'work' %}<span class="badge bg-primary">Arbeit</span>
-              {% elif d.kind == 'vacation' %}<span class="badge bg-warning text-dark">Urlaub</span>
-              {% elif d.kind == 'sick' %}<span class="badge bg-danger">Krank</span>
-              {% elif d.kind == 'holiday' %}<span class="badge bg-info text-dark">Feiertag</span>
-              {% elif d.kind == 'weekend' %}<span class="text-muted">Wochenende</span>
-              {% elif d.kind == 'future' %}<span class="text-muted small">noch offen</span>
-              {% elif d.kind == 'inactive' %}<span class="text-muted small">inaktiv</span>
-              {% else %}<span class="text-muted">—</span>
-              {% endif %}
-            </td>
-            <td class="text-end">
               {% if d.kind == 'work' and d.windows %}
-                {% for s, e in d.windows %}{{ s.strftime('%H:%M') }}{% if not loop.last %}<br />{% endif %}{% endfor %}
-              {% else %}–{% endif %}
+                {% for s, e in d.windows %}
+                  <span class="text-nowrap">{{ s.strftime('%H:%M') }}–{% if e %}{{ e.strftime('%H:%M') }}{% else %}<span class="badge text-bg-success">läuft</span>{% endif %}</span>{% if not loop.last %}<br />{% endif %}
+                {% endfor %}
+              {% else %}<span class="text-muted">–</span>{% endif %}
+              {% set show_note = d.note and d.kind not in ('vacation', 'sick', 'future') %}
+              {% if show_note %}<div class="d-lg-none"><small class="text-muted">{{ d.note }}</small></div>{% endif %}
             </td>
             <td class="text-end">
-              {% if d.kind == 'work' and d.windows %}
-                {% for s, e in d.windows %}{% if e %}{{ e.strftime('%H:%M') }}{% else %}<span class="badge bg-success">läuft</span>{% endif %}{% if not loop.last %}<br />{% endif %}{% endfor %}
-              {% else %}–{% endif %}
+              {% if d.kind in ('work', 'vacation', 'sick') %}{{ d.net|hm }}{% else %}<span class="text-muted">–</span>{% endif %}
             </td>
             <td class="text-end">
-              {% if (d.target > 0 or d.kind == 'work') and d.kind != 'future' %}
-                <span class="{{ 'month-saldo-positive' if d.diff >= 0 else 'month-saldo-negative' }}">
-                  {{ '%+.2f'|format(d.diff) }}
-                </span>
-              {% else %}–{% endif %}
+              {% if (d.target > 0 or d.kind == 'work') and d.kind not in ('future', 'inactive') %}
+                <span class="{{ 'text-plus' if d.diff >= 0 else 'text-minus' }}">{{ d.diff|hm_signed }}</span>
+              {% else %}<span class="text-muted">–</span>{% endif %}
             </td>
-            <td><small class="text-muted">{{ d.note }}</small></td>
-            <td class="text-end">
-              {% if d.kind not in ('holiday', 'inactive') %}
-                {% if d.date == today and d.kind in ('work', 'empty', 'weekend') %}
-                  {% if d.running %}
-                    <form method="post" action="{{ url_for('clock_end', user_id=user.id) }}" class="d-inline">
-                      <button class="btn btn-sm btn-danger" type="submit">Ende</button>
-                    </form>
-                  {% else %}
-                    <form method="post" action="{{ url_for('clock_start', user_id=user.id) }}" class="d-inline">
-                      <button class="btn btn-sm btn-success" type="submit">Anfang</button>
-                    </form>
-                  {% endif %}
-                {% endif %}
-                <a class="btn btn-sm btn-outline-primary"
-                   href="{{ url_for('entry_form', user_id=user.id, date=d.date.isoformat()) }}">
-                  Ändern
-                </a>
-              {% endif %}
-              {% if d.kind in ('work','vacation','sick') %}
+            <td class="d-none d-lg-table-cell">
+              {% if show_note %}<small class="text-muted">{{ d.note }}</small>{% endif %}
+            </td>
+            <td class="text-end text-nowrap">
+              {% set edit_url = url_for('entry_form', user_id=user.id, date=d.date.isoformat()) %}
+              {% if d.kind in ('work', 'vacation', 'sick') %}
+                <a class="btn btn-sm btn-outline-primary" href="{{ edit_url }}">Ändern</a>
                 <form method="post"
                       action="{{ url_for('delete_day', user_id=user.id, iso_date=d.date.isoformat()) }}"
                       class="d-inline"
-                      onsubmit="return confirm('Eintrag wirklich löschen?');">
-                  <button class="btn btn-sm btn-outline-danger" type="submit">×</button>
+                      onsubmit="return confirm('Eintrag vom {{ d.date|datum }} wirklich löschen?');">
+                  <button class="btn btn-sm btn-outline-secondary" type="submit"
+                          aria-label="Eintrag vom {{ d.date|datum }} löschen">Löschen</button>
                 </form>
+              {% elif d.kind == 'empty' %}
+                <a class="btn btn-sm btn-outline-danger" href="{{ edit_url }}">Nachtragen</a>
+              {% elif d.kind in ('weekend', 'future') %}
+                <a class="btn btn-sm btn-link text-decoration-none" href="{{ edit_url }}">Eintragen</a>
               {% endif %}
             </td>
           </tr>
@@ -213,12 +242,34 @@
       </tbody>
     </table>
   </div>
-</div>
+</section>
 
+<details class="zf-details zf-help">
+  <summary>So wird gerechnet</summary>
+  <ul class="mt-2 mb-0">
+    <li>Tagessoll = Wochenstunden ÷ 5 an jedem Werktag (Mo–Fr).</li>
+    <li>Pausen werden nach ArbZG §4 je Zeitfenster automatisch abgezogen:
+        über 6 h → 30 min, über 9 h → 45 min.</li>
+    <li>Gesetzliche Feiertage (Sachsen-Anhalt) haben kein Soll. Arbeit am Wochenende zählt komplett als Überstunden.</li>
+    <li>Urlaub und Krank werden mit dem Tagessoll angerechnet.</li>
+    <li>Leere Werktage bis heute zählen mit vollem Soll ins Minus, zukünftige erst, wenn etwas eingetragen ist.</li>
+  </ul>
+</details>
+
+{% if ns.open_start %}
 <script>
+  // Laufzeit des offenen Zeitfensters live anzeigen (h:mm, UI-1).
   (function () {
-    const row = document.getElementById('today-row');
-    if (row) row.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const el = document.getElementById('liveTimer');
+    const [h, m] = el.dataset.start.split(':').map(Number);
+    function tick() {
+      const now = new Date();
+      const mins = Math.max(0, now.getHours() * 60 + now.getMinutes() - (h * 60 + m));
+      el.textContent = Math.floor(mins / 60) + ':' + String(mins % 60).padStart(2, '0') + ' h';
+    }
+    tick();
+    setInterval(tick, 15000);
   })();
 </script>
+{% endif %}
 {% endblock %}

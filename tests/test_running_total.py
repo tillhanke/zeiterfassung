@@ -71,8 +71,9 @@ class TestSetting:
         with app.app_context():
             assert yearly_reset_enabled() is True
 
-    def test_admin_shows_toggle(self, client, login_admin):
-        r = client.get("/admin")
+    def test_settings_page_shows_toggle(self, client, login_admin):
+        """NUTZ-8: Firmeneinstellungen auf eigener Seite."""
+        r = client.get("/admin/settings")
         assert "Saldo zum Jahreswechsel auf 0 setzen".encode() in r.data
         assert b'id="yearly_reset"' in r.data
         assert b"checked" in r.data

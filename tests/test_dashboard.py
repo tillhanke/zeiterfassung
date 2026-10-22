@@ -48,7 +48,7 @@ class TestDashboardContent:
     def test_workday_appears_in_table(self, client, login_alice, make_workday):
         make_workday(login_alice, date(2026, 5, 11), time(9, 0), time(17, 30))
         r = client.get(f"/user/{login_alice}?year=2026&month=5")
-        assert b"2026-05-11" in r.data
+        assert "Mo 11.05.".encode() in r.data  # UI-2
         assert b"Arbeit" in r.data
 
     def test_workday_start_and_end_time_shown(self, client, login_alice, make_workday):
@@ -74,18 +74,20 @@ class TestDashboardContent:
         make_workday(login_alice, date(2026, 5, 9), time(9, 0), time(13, 0))
         r = client.get(f"/user/{login_alice}?year=2026&month=5")
         assert "Wochenende: zählt als Überstunden".encode() in r.data
-        assert b"+4.00" in r.data
+        assert b"+4:00" in r.data  # UI-1: h:mm
 
-    def test_table_no_longer_shows_brutto_netto_soll_columns(self, client, login_alice):
+    def test_table_columns(self, client, login_alice):
         r = client.get(f"/user/{login_alice}?year=2026&month=5")
-        # Spaltenüberschriften "Brutto"/"Netto"/"Soll" in der Tagestabelle sind weg.
-        assert b"<th class=\"text-end\">Brutto</th>" not in r.data
-        assert b"<th class=\"text-end\">Netto</th>" not in r.data
-        # Soll-Karte oben enthält "Soll" weiterhin, aber kein <th>Soll</th> mehr.
-        assert b"<th class=\"text-end\">Soll</th>" not in r.data
-        # Stattdessen sind Start und Ende vorhanden.
-        assert b"<th class=\"text-end\">Start</th>" in r.data
-        assert b"<th class=\"text-end\">Ende</th>" in r.data
+        # Keine Brutto-/Netto-Spalten; Zeitfenster stehen zusammen in "Zeiten".
+        assert b">Brutto</th>" not in r.data
+        assert b">Netto</th>" not in r.data
+        assert b"<th>Zeiten</th>" in r.data
+        assert b">Ist</th>" in r.data
+
+    def test_windows_shown_as_ranges(self, client, login_alice, make_workday):
+        make_workday(login_alice, date(2026, 5, 11), time(8, 15), time(16, 45))
+        r = client.get(f"/user/{login_alice}?year=2026&month=5")
+        assert "08:15–16:45".encode() in r.data
 
     def test_vacation_badge_present(self, client, login_alice, make_absence):
         make_absence(login_alice, date(2026, 5, 11), kind="vacation")
@@ -134,10 +136,9 @@ class TestDashboardContent:
         r = client.get(f"/user/{alice_id}?year=2026&month=5")
         assert r.status_code == 200
 
-    def test_bulk_button_present(self, client, login_alice):
-        r = client.get(f"/user/{login_alice}?year=2026&month=5")
-        assert b"Mehrere Tage" in r.data
-
-    def test_add_button_links_to_today(self, client, login_alice):
-        r = client.get(f"/user/{login_alice}?year=2026&month=5")
-        assert b"Tag eintragen" in r.data
+    def test_single_entry_button(self, client, login_alice):
+        """Ein Button für einen oder mehrere Tage (ERF-9)."""
+        html = client.get(f"/user/{login_alice}?year=2026&month=5").data.decode()
+        assert "+ Eintragen" in html
+        assert f'href="/user/{login_alice}/entry"' in html
+        assert "Mehrere Tage" not in html

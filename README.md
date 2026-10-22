@@ -6,15 +6,17 @@ zeigt Soll, Ist und Saldo (Über-/Minderstunden). Urlaub und Krankentage sind
 eintragbar. Ein Admin-Panel verwaltet Nutzerinnen und ihre Wochenarbeitszeit.
 
 > Hinweis: Authentifizierung ist bewusst nicht implementiert. Die Trennung
-> zwischen Nutzerinnen und Admin erfolgt nur über einen Selektor in der Topbar.
+> zwischen Nutzerinnen und Admin erfolgt nur über die Namensauswahl auf der
+> Startseite (Kacheln, „Verwaltung" für Admin).
 
 ## Features
 
 - Mehrere Nutzerinnen, jeweils mit individueller Wochenarbeitszeit (Standard 40 h).
 - Tageseintrag als **Arbeit** (Start- und Endzeit), **Urlaub** oder **Krank**.
-- **Sammeleintrag**: Mehrere (auch nicht aufeinanderfolgende) Tage gleichzeitig
-  mit derselben Arbeitszeit bzw. als Urlaub/Krank eintragen. Einzeltage hinzufügen
-  oder einen Zeitraum (optional nur Mo-Fr, Feiertage überspringen) einlesen.
+- **Ein Eintragsformular für einen oder mehrere Tage**: Tage im Kalender
+  einzeln oder als Zeitraum (ohne Wochenenden/Feiertage) wählen und mit
+  derselben Arbeitszeit bzw. als Urlaub/Krank eintragen; Vorlage „Wie letzter
+  Arbeitstag".
 - Pausenabzug nach ArbZG §4:
   - > 6 h Bruttoarbeit → 30 min Pause abgezogen
   - > 9 h Bruttoarbeit → 45 min Pause abgezogen
@@ -39,9 +41,14 @@ eintragbar. Ein Admin-Panel verwaltet Nutzerinnen und ihre Wochenarbeitszeit.
   Neujahr, Heilige Drei Könige, Karfreitag, Ostermontag, Tag der Arbeit,
   Christi Himmelfahrt, Pfingstmontag, Tag der Deutschen Einheit,
   Reformationstag und beide Weihnachtsfeiertage.
-- Admin-Panel: Übersicht aller Nutzerinnen mit aktuellem Monatssaldo,
-  Wochenstunden bearbeiten, Nutzerinnen anlegen / deaktivieren / aktivieren.
+- Admin-Panel: Nutzerin anlegen, Nutzerinnen mit Monats- und Gesamtsaldo
+  sowie Summe über alle; Detailseite je Nutzerin (Stammdaten in einem
+  Formular, deaktivieren/aktivieren); Einstellungen auf eigener Seite.
+- Hinweis im Dashboard, wenn an einem früheren Tag nicht ausgestempelt wurde.
 - Live-Vorschau der Nettoarbeitszeit beim Eintragen (Vanilla JS).
+- Oberfläche für ein gemeinsames Gerät (PC/Tablet): Namenskacheln auf der
+  Startseite, Karte „Heute" mit großem Stempel-Button, Dauern als `h:mm`
+  (siehe [Spec UI](docs/spec/oberflaeche.md)).
 
 ## Setup
 
@@ -186,12 +193,16 @@ zeiterf/
 ├── docs/
 │   ├── spec/              # verbindliches Verhalten, nummerierte Regeln
 │   └── decisions/         # ADRs: warum etwas so entschieden wurde
+├── static/
+│   └── app.css            # gemeinsame Gestaltung (Farb-Tokens, Kacheln, Tagesliste)
 ├── templates/
 │   ├── base.html
 │   ├── index.html
 │   ├── user_dashboard.html
-│   ├── entry_form.html
-│   ├── bulk_entry_form.html
+│   ├── entry_form.html    # Eintragen mit Kalender (ein oder mehrere Tage)
+│   ├── admin_user.html    # Detailseite einer Nutzerin (Verwaltung)
+│   ├── admin_settings.html # Firmeneinstellungen
+│   ├── _work_windows.html # Zeitfenster-Eingabe mit Live-Vorschau
 │   └── admin.html
 └── tests/
     ├── conftest.py        # gemeinsame pytest-Fixtures
@@ -199,11 +210,12 @@ zeiterf/
     ├── test_models.py     # DB-Constraints, Cascade
     ├── test_auth.py       # Session-Switch, Route-Schutz
     ├── test_entry.py      # Einzel-Tageseintrag
-    ├── test_bulk_entry.py # Sammeleintrag (mehrere Tage)
+    ├── test_bulk_entry.py # mehrere Tage auf einmal eintragen
     ├── test_dashboard.py  # Dashboard-Rendering
     ├── test_admin.py      # Admin-Panel, User-CRUD
     ├── test_start_date.py # Startdatum und Übertrag
     ├── test_running_total.py # Gesamtsaldo, Nullstellung zum Jahreswechsel
+    ├── test_ui.py         # Anzeigeformate, Startseite, Karte „Heute“, Admin-Ansicht
     └── test_cli.py        # init-db / reset-db, Migrationen
 ```
 

@@ -98,7 +98,7 @@ class TestClockStart:
         make_workday(login_alice, date(2026, 5, 8), time(8, 0), None)
         freeze_now(datetime(2026, 5, 11, 8, 0))
         r = _start(client, login_alice)
-        assert b"2026-05-08" in r.data
+        assert b"08.05.2026" in r.data  # UI-2
         assert _windows(app, login_alice) == []
 
     def test_absence_blocks(self, client, login_alice, app, freeze_now, make_absence):
@@ -146,14 +146,46 @@ class TestClockEnd:
         assert _windows(app, login_alice) == [(time(8, 0), None)]
 
 
+class TestAdminCannotClock:
+    def test_admin_clock_start_rejected(self, client, login_admin, alice_id, app, freeze_now):
+        """NUTZ-10: Admin kann nicht für eine Nutzerin stempeln."""
+        freeze_now(datetime(2026, 5, 11, 8, 0))
+        r = _start(client, alice_id)
+        assert "Als Admin kann nicht gestempelt werden".encode() in r.data
+        assert _windows(app, alice_id) == []
+
+    def test_admin_clock_end_rejected(self, client, login_admin, alice_id, app, freeze_now, make_workday):
+        """NUTZ-10: auch ein offenes Fenster beendet Admin nicht."""
+        make_workday(alice_id, date(2026, 5, 11), time(8, 0), None)
+        freeze_now(datetime(2026, 5, 11, 12, 0))
+        r = _end(client, alice_id)
+        assert "Als Admin kann nicht gestempelt werden".encode() in r.data
+        assert _windows(app, alice_id) == [(time(8, 0), None)]
+
+    def test_admin_can_still_edit_entries(self, client, login_admin, alice_id, app):
+        """NUTZ-10: Korrigieren bleibt für Admin möglich."""
+        r = client.post(
+            f"/user/{alice_id}/entry",
+            data={"date": "2026-05-11", "kind": "work",
+                  "start_hour": "08", "start_minute": "00",
+                  "end_hour": "16", "end_minute": "00"},
+            follow_redirects=True,
+        )
+        assert r.status_code == 200
+        assert _windows(app, alice_id) == [(time(8, 0), time(16, 0))]
+
+
 class TestDashboardButtons:
-    def test_today_shows_anfang_other_days_only_aendern(self, client, login_alice, freeze_now):
+    def test_anfang_only_in_today_card(self, client, login_alice, freeze_now, make_workday):
+        """UI-4: Stempeln nur über die Karte „Heute“, nicht in der Tagesliste."""
+        make_workday(login_alice, date(2026, 5, 8), time(8, 0), time(16, 0))
         freeze_now(datetime(2026, 5, 11, 8, 0))
         html = client.get(f"/user/{login_alice}?year=2026&month=5").data.decode()
         assert html.count(">Anfang</button>") == 1
         assert ">Ende</button>" not in html
-        assert "Eintragen\n" not in html
-        assert "Ändern" in html
+        assert "Nicht eingestempelt" in html
+        assert "Ändern" in html  # 08.05. hat einen Eintrag
+        assert "Nachtragen" in html  # leere Werktage davor
 
     def test_running_window_shows_ende(self, client, login_alice, freeze_now, make_workday):
         make_workday(login_alice, date(2026, 5, 11), time(8, 0), None)
@@ -161,7 +193,8 @@ class TestDashboardButtons:
         html = client.get(f"/user/{login_alice}?year=2026&month=5").data.decode()
         assert html.count(">Ende</button>") == 1
         assert ">Anfang</button>" not in html
-        assert "btn-danger\" type=\"submit\">Ende" in html
+        assert "Eingestempelt seit 08:00" in html
+        assert 'id="liveTimer" data-start="08:00"' in html
         assert "läuft seit 08:00" in html
 
     def test_no_clock_button_on_holiday(self, client, login_alice, freeze_now):

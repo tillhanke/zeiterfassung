@@ -398,7 +398,7 @@ def build_month_summary(
     opening = opening_balance_between(user, first_day, last_day)
     if start_date is not None and first_day <= start_date <= last_day:
         start_day = days[start_date.day - 1]
-        transfer = f"Übertrag {opening:+.2f} h"
+        transfer = f"Übertrag {format_hm(opening, signed=True)} h"
         start_day.note = f"{transfer} · {start_day.note}" if start_day.note else transfer
 
     return MonthSummary(
@@ -416,6 +416,70 @@ def shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
     """Gibt (year, month) verschoben um delta Monate zurück."""
     idx = (year * 12 + (month - 1)) + delta
     return idx // 12, idx % 12 + 1
+
+
+# ---------------------------------------------------------------------------
+# Anzeigeformate
+# ---------------------------------------------------------------------------
+
+MONATE = [
+    "Januar", "Februar", "März", "April", "Mai", "Juni",
+    "Juli", "August", "September", "Oktober", "November", "Dezember",
+]
+WOCHENTAGE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+MINUS = "−"  # typografisches Minus, gleich breit wie "+"
+
+
+def format_hm(hours: float, signed: bool = False) -> str:
+    """Stunden als h:mm, auf volle Minuten gerundet: 7.75 -> "7:45".
+
+    signed=True stellt immer ein Vorzeichen voran ("+0:15", "−1:30");
+    0 wird dann als "±0:00" angezeigt.
+    """
+    total = round(hours * 60)
+    sign = ""
+    if total < 0:
+        sign = MINUS
+    elif signed:
+        sign = "+" if total > 0 else "±"
+    h, m = divmod(abs(total), 60)
+    return f"{sign}{h}:{m:02d}"
+
+
+def parse_hours(text: str) -> float:
+    """Stunden aus Eingabe: "6,5", "6.5", "6:30", "+6:30", "−2:30" (auch
+    typografisches Minus). Leer -> 0. Ungültig -> ValueError."""
+    t = text.strip().replace(MINUS, "-").replace(" ", "")
+    if not t:
+        return 0.0
+    if ":" in t:
+        sign = -1 if t.startswith("-") else 1
+        h, m = t.lstrip("+-").split(":")
+        if not h.isdigit() or not (m.isdigit() and len(m) == 2 and int(m) < 60):
+            raise ValueError(text)
+        return sign * (int(h) + int(m) / 60)
+    return float(t.replace(",", "."))
+
+
+def format_number(x: float) -> str:
+    """Zahl mit deutschem Dezimalkomma, ohne überflüssige Nachkommastellen:
+    40.0 -> "40", 38.5 -> "38,5"."""
+    return f"{x:g}".replace(".", ",")
+
+
+def format_date(d: date) -> str:
+    """Datum deutsch mit Jahr: 22.10.2026."""
+    return f"{d.day:02d}.{d.month:02d}.{d.year}"
+
+
+def format_day(d: date) -> str:
+    """Kurzform für Tageslisten: "Do 22.10."."""
+    return f"{WOCHENTAGE[d.weekday()][:2]} {d.day:02d}.{d.month:02d}."
+
+
+def format_long_date(d: date) -> str:
+    """Langform für Überschriften: "Donnerstag, 22. Oktober 2026"."""
+    return f"{WOCHENTAGE[d.weekday()]}, {d.day}. {MONATE[d.month - 1]} {d.year}"
 
 
 # ---------------------------------------------------------------------------

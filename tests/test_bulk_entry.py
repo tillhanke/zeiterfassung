@@ -20,23 +20,11 @@ def _minute_options(html):
 
 
 class TestBulkGet:
-    def test_form_renders(self, client, login_alice):
+    def test_get_redirects_to_entry_form(self, client, login_alice):
+        """Sammeleintrag ist Teil des Eintragsformulars (ERF-9)."""
         r = client.get(f"/user/{login_alice}/bulk-entry")
-        assert r.status_code == 200
-        assert b"Mehrere Tage eintragen" in r.data
-        assert b"chipsContainer" in r.data
-        assert b"singleDate" in r.data
-        assert b"rangeFrom" in r.data
-
-    def test_minute_select_offers_only_quarter_hours(self, client, login_alice):
-        r = client.get(f"/user/{login_alice}/bulk-entry")
-        assert _minute_options(r.data.decode()) == [["", "00", "15", "30", "45"]] * 2
-
-    def test_holidays_json_in_form(self, client, login_alice):
-        r = client.get(f"/user/{login_alice}/bulk-entry")
-        # Tag der Arbeit muss als Feiertag im JS bekannt sein.
-        assert b"2026-05-01" in r.data
-
+        assert r.status_code == 302
+        assert r.headers["Location"].endswith(f"/user/{login_alice}/entry")
 
 class TestBulkWork:
     def test_three_non_consecutive_workdays(self, client, login_alice, app):
@@ -166,7 +154,7 @@ class TestBulkWeekend:
         with app.app_context():
             assert sorted(a.date for a in Absence.query.all()) == [date(2026, 5, 8), date(2026, 5, 11)]
         page = client.get(r.headers["Location"]).data.decode()
-        assert "2 Wochenendtag(e) übersprungen" in page
+        assert "2 Wochenendtage übersprungen" in page
 
     def test_vacation_only_weekend_rejected(self, client, login_alice, app):
         r = _bulk_post(client, login_alice, "2026-05-09, 2026-05-10", kind="vacation")

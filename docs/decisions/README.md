@@ -58,3 +58,7 @@ ursprünglich getroffen wurden (soweit bekannt, z. B. aus der Git-Historie).
 | [0013](0013-deaktivieren-statt-loeschen.md) | Nutzerinnen deaktivieren statt löschen | Akzeptiert |
 | [0014](0014-deployment-docker-und-systemd.md) | Deployment per Docker oder systemd | Akzeptiert |
 | [0015](0015-wochenstunden-ohne-grenzen.md) | Wochenstunden ab 0, ohne Obergrenze | Akzeptiert |
+| [0016](0016-dauern-als-stunden-minuten.md) | Dauern werden als Stunden:Minuten angezeigt | Akzeptiert |
+| [0017](0017-admin-korrigiert-stempelt-nicht.md) | Admin korrigiert Einträge, stempelt aber nicht | Akzeptiert |
+| [0018](0018-oberflaeche-fuer-gemeinsames-geraet.md) | Oberfläche für ein gemeinsames Gerät (Kiosk) | Akzeptiert |
+| [0019](0019-ein-eintragsformular-mit-kalender.md) | Ein Eintragsformular mit Kalender statt Einzel- und Sammeleintrag | Akzeptiert |

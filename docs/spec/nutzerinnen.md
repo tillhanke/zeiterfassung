@@ -13,10 +13,13 @@ Verwaltung der Nutzerinnen und Firmeneinstellungen im Admin-Panel.
 ### Zugang
 
 - **NUTZ-1** – Es gibt keinen Login. Die Identität wird auf der Startseite
-  bzw. in der Topbar aus den aktiven Nutzerinnen und „Admin" gewählt.
-  → ADR-0002
+  aus den aktiven Nutzerinnen und „Verwaltung" (Admin) gewählt; „Abmelden"
+  in der Topbar führt zurück dorthin (→ UI-3). → ADR-0002, ADR-0018
 - **NUTZ-2** – Als Nutzerin sind nur die eigenen Daten sichtbar und
   änderbar. Als Admin sind alle Nutzerinnen und ihre Dashboards zugänglich.
+- **NUTZ-10** – Admin kann Einträge aller Nutzerinnen anlegen, ändern und
+  löschen, aber nicht für sie stempeln. „Anfang"/„Ende" als Admin wird mit
+  Hinweis abgelehnt, es wird nichts gespeichert. → ADR-0017
 - **NUTZ-3** – Nach 10 min ohne Eingabe (Maus, Tastatur, Scrollen, Touch)
   wechselt die Seite zur Startseite und die Identität wird verworfen. Der
   Server setzt das auch durch, wenn der Browser es nicht tut (z. B. nach
@@ -30,15 +33,28 @@ Verwaltung der Nutzerinnen und Firmeneinstellungen im Admin-Panel.
   Wochenstunden 0 bedeutet: kein Soll, jede Arbeit zählt als Überstunden.
   → ADR-0015
   *(offen: derzeit 0 < Wochenstunden ≤ 60)*
-- **NUTZ-5** – Wochenstunden, Startdatum und Übertrag sind nachträglich
-  änderbar und wirken rückwirkend auf alle Berechnungen.
+- **NUTZ-5** – Name, Wochenstunden, Startdatum und Übertrag sind nachträglich
+  auf der Detailseite der Nutzerin in einem Formular änderbar (ein
+  „Speichern"). Ist eine Eingabe ungültig, wird nichts geändert und die
+  Eingaben bleiben stehen. Wochenstunden, Startdatum und Übertrag wirken
+  rückwirkend auf alle Berechnungen; der Name bleibt eindeutig (NUTZ-4).
 - **NUTZ-6** – Nutzerinnen werden deaktiviert, nicht gelöscht. Deaktivierte
   erscheinen nicht in der Auswahl, ihre Daten bleiben erhalten, sie können
   wieder aktiviert werden. → ADR-0013
-- **NUTZ-7** – Das Admin-Panel zeigt alle Nutzerinnen mit Monatssaldo des
-  laufenden Monats und Gesamtsaldo.
-- **NUTZ-8** – Firmeneinstellungen: Nullstellung zum Jahreswechsel
-  (SALDO-11), Rundung beim Stempeln (ERF-15), Bundesland (FEIER-1).
+- **NUTZ-7** – Die Übersicht des Admin-Panels zeigt alle aktiven Nutzerinnen
+  mit Monatssaldo des laufenden Monats und Gesamtsaldo; deaktivierte stehen
+  eingeklappt darunter.
+- **NUTZ-8** – Firmeneinstellungen stehen auf einer eigenen Seite:
+  Nullstellung zum Jahreswechsel (SALDO-11), Rundung beim Stempeln
+  (ERF-15), Bundesland (FEIER-1).
+- ~~**NUTZ-11**~~ – entfallen: „Braucht Aufmerksamkeit" (eingestempelt,
+  offene Stempelungen, fehlende Tage). Ohne festgelegte Arbeitstage je
+  Nutzerin sind „fehlende Tage" irreführend; offene Stempelungen meldet
+  das Dashboard der Nutzerin selbst (UI-7).
+- **NUTZ-12** – Die Übersicht zeigt die Summe der Gesamtsalden und die Summe
+  der Monatssalden aller aktiven Nutzerinnen (Stand heute), oben in der
+  Nutzerinnen-Karte und als Summenzeile der Tabelle. Deaktivierte zählen
+  nicht mit.
 
 ### Wartung
 
@@ -48,6 +64,6 @@ Verwaltung der Nutzerinnen und Firmeneinstellungen im Admin-Panel.
 
 ## Verweise
 
-- ADRs: 0002, 0013, 0015
+- ADRs: 0002, 0013, 0015, 0017, 0018
 - Tests: `tests/test_auth.py`, `tests/test_idle_timeout.py`,
-  `tests/test_admin.py`, `tests/test_anonymize.py`
+  `tests/test_admin.py`, `tests/test_anonymize.py`, `tests/test_clock.py`

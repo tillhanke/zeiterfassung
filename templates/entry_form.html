@@ -1,41 +1,273 @@
 {% extends "base.html" %}
-{% block title %}Tag eintragen – {{ user.name }}{% endblock %}
+{% block title %}{{ 'Eintrag ändern' if editing else 'Eintragen' }} – {{ user.name }}{% endblock %}
 {% block content %}
-<div class="row">
-  <div class="col-lg-8 mx-auto">
-    <h1 class="h3 mb-3">Tag eintragen für {{ user.name }}</h1>
 
-    <form method="post" class="card card-body shadow-sm" id="entryForm">
-      <div class="mb-3">
-        <label class="form-label">Datum</label>
-        <input type="date" name="date" class="form-control" required
-               value="{{ prefill_date or today.isoformat() }}" />
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label d-block">Typ</label>
-        <div class="btn-group" role="group" aria-label="Eintragstyp">
-          <input type="radio" class="btn-check" name="kind" id="kindWork" value="work" checked />
-          <label class="btn btn-outline-primary" for="kindWork">Arbeit</label>
-
-          <input type="radio" class="btn-check" name="kind" id="kindVacation" value="vacation" />
-          <label class="btn btn-outline-warning" for="kindVacation">Urlaub</label>
-
-          <input type="radio" class="btn-check" name="kind" id="kindSick" value="sick" />
-          <label class="btn btn-outline-danger" for="kindSick">Krank</label>
-        </div>
-      </div>
-
-      {% include "_work_windows.html" %}
-
-      <div class="d-flex gap-2 mt-4">
-        <button class="btn btn-primary" type="submit">Speichern</button>
-        <a class="btn btn-outline-secondary" href="{{ url_for('user_dashboard', user_id=user.id) }}">
-          Abbrechen
-        </a>
-      </div>
-    </form>
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+  <div>
+    <h1 class="h3 mb-0">{{ 'Eintrag ändern' if editing else 'Eintragen' }}</h1>
+    <small class="text-muted">für {{ user.name }} · Soll/Tag {{ user.daily_target|hm }} h</small>
   </div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('user_dashboard', user_id=user.id) }}">Abbrechen</a>
 </div>
 
+<form method="post" action="{{ url_for('entry_form', user_id=user.id) }}" id="entryForm">
+  <input type="hidden" name="dates" id="datesField" value="{{ dates|join(',') }}" />
+
+  <div class="row g-3">
+    {# ---------- 1. Tage ---------- #}
+    <div class="col-lg-6">
+      <section class="card h-100" aria-labelledby="daysHeading">
+        <div class="card-body p-3 p-md-4">
+          <h2 class="h6 text-muted mb-3" id="daysHeading">1 · Tage wählen</h2>
+
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            <div class="btn-group" role="group" aria-label="Auswahlmodus">
+              <input type="radio" class="btn-check" name="calMode" id="modeSingle" value="single" checked autocomplete="off" />
+              <label class="btn btn-outline-secondary" for="modeSingle">Einzelne Tage</label>
+              <input type="radio" class="btn-check" name="calMode" id="modeRange" value="range" autocomplete="off" />
+              <label class="btn btn-outline-secondary" for="modeRange">Zeitraum</label>
+            </div>
+            <button type="button" class="btn btn-light border" id="pickToday">Heute</button>
+            <button type="button" class="btn btn-light border" id="pickWeek">Diese Woche</button>
+            <button type="button" class="btn btn-link text-decoration-none ms-auto" id="pickClear">Leeren</button>
+          </div>
+
+          <div class="zf-cal" id="calendar">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <button type="button" class="btn btn-outline-secondary zf-cal-nav" id="calPrev" aria-label="Vorheriger Monat">‹</button>
+              <div class="fw-semibold" id="calTitle" aria-live="polite"></div>
+              <button type="button" class="btn btn-outline-secondary zf-cal-nav" id="calNext" aria-label="Nächster Monat">›</button>
+            </div>
+            <div class="zf-cal-grid" id="calGrid" role="grid"></div>
+          </div>
+
+          <p class="zf-help mt-2 mb-0" id="rangeHint" hidden>
+            Ersten und letzten Tag antippen. Wochenenden und Feiertage werden dabei ausgelassen.
+          </p>
+          <div class="mt-3" id="selectionSummary" aria-live="polite"></div>
+        </div>
+      </section>
+    </div>
+
+    {# ---------- 2. Art + 3. Zeiten ---------- #}
+    <div class="col-lg-6">
+      <section class="card h-100" aria-labelledby="kindHeading">
+        <div class="card-body p-3 p-md-4 d-flex flex-column">
+          <h2 class="h6 text-muted mb-3" id="kindHeading">2 · Was?</h2>
+          <div class="zf-kind-choice mb-4" role="group" aria-label="Eintragsart">
+            <input type="radio" class="btn-check" name="kind" id="kindWork" value="work" {% if kind == 'work' %}checked{% endif %} />
+            <label class="btn btn-outline-primary" for="kindWork">Arbeit</label>
+            <input type="radio" class="btn-check" name="kind" id="kindVacation" value="vacation" {% if kind == 'vacation' %}checked{% endif %} />
+            <label class="btn zf-btn-vacation" for="kindVacation">Urlaub</label>
+            <input type="radio" class="btn-check" name="kind" id="kindSick" value="sick" {% if kind == 'sick' %}checked{% endif %} />
+            <label class="btn zf-btn-sick" for="kindSick">Krank</label>
+          </div>
+
+          <div id="workSection">
+            <h2 class="h6 text-muted mb-3">3 · Arbeitszeit</h2>
+            {% if last_workday %}
+              <button type="button" class="btn btn-light border w-100 text-start mb-3" id="presetLast"
+                      data-windows='{{ last_workday.windows|tojson }}'>
+                ↺ Wie letzter Arbeitstag
+                <small class="text-muted d-block">
+                  {{ last_workday.date|tag }}:
+                  {% for s, e in last_workday.windows %}{{ s }}–{{ e }}{% if not loop.last %}, {% endif %}{% endfor %}
+                </small>
+              </button>
+            {% endif %}
+            {% include "_work_windows.html" %}
+          </div>
+          <p class="zf-help mb-0" id="absenceHint" hidden>
+            Urlaub und Krank werden mit dem Tagessoll ({{ user.daily_target|hm }} h) angerechnet.
+            Wochenendtage werden dabei übersprungen.
+          </p>
+
+          <div class="mt-auto pt-4">
+            <button class="btn btn-primary btn-lg w-100" type="submit" id="submitBtn">Speichern</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</form>
+
+<script>
+  (function () {
+    const HOLIDAYS = {{ holidays_json|safe }};
+    const ENTRIES = {{ entries_json|safe }};
+    const START = {{ (user.start_date.isoformat() if user.start_date else '')|tojson }};
+    const TODAY = '{{ today.isoformat() }}';
+    const MONATE = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+    const WT = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+    const KIND_LABEL = { work: 'Arbeit', vacation: 'Urlaub', sick: 'Krank' };
+
+    const form = document.getElementById('entryForm');
+    const datesField = document.getElementById('datesField');
+    const grid = document.getElementById('calGrid');
+    const title = document.getElementById('calTitle');
+    const summary = document.getElementById('selectionSummary');
+    const submitBtn = document.getElementById('submitBtn');
+    const rangeHint = document.getElementById('rangeHint');
+
+    const selected = new Set(datesField.value ? datesField.value.split(',') : []);
+    let anchor = null;  // erster Tag im Zeitraum-Modus
+
+    const parse = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
+    const iso = dt => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    const label = s => { const d = parse(s); return `${WT[d.getDay()]} ${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.`; };
+    const isWeekend = s => [0, 6].includes(parse(s).getDay());
+    const isWorkday = s => !isWeekend(s) && !HOLIDAYS[s];
+    const beforeStart = s => START && s < START;
+    const mode = () => form.querySelector('input[name="calMode"]:checked').value;
+    const kind = () => form.querySelector('input[name="kind"]:checked').value;
+
+    const first = selected.size ? parse([...selected].sort()[0]) : parse(TODAY);
+    let viewY = first.getFullYear(), viewM = first.getMonth();
+
+    function renderCalendar() {
+      title.textContent = `${MONATE[viewM]} ${viewY}`;
+      grid.innerHTML = '';
+      for (const wd of ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']) {
+        const h = document.createElement('div');
+        h.className = 'zf-cal-head';
+        h.textContent = wd;
+        grid.appendChild(h);
+      }
+      const start = new Date(viewY, viewM, 1);
+      const offset = (start.getDay() + 6) % 7;  // Montag = 0
+      for (let i = 0; i < offset; i++) grid.appendChild(document.createElement('div'));
+      const days = new Date(viewY, viewM + 1, 0).getDate();
+      for (let d = 1; d <= days; d++) {
+        const s = iso(new Date(viewY, viewM, d));
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'zf-cal-day';
+        b.dataset.date = s;
+        b.textContent = d;
+        const notes = [];
+        if (isWeekend(s)) b.classList.add('is-weekend');
+        if (HOLIDAYS[s]) { b.classList.add('is-holiday'); notes.push(HOLIDAYS[s]); }
+        if (ENTRIES[s]) { b.classList.add('has-' + ENTRIES[s]); notes.push('eingetragen: ' + KIND_LABEL[ENTRIES[s]]); }
+        if (s === TODAY) { b.classList.add('is-today'); notes.push('heute'); }
+        if (s === anchor) b.classList.add('is-anchor');
+        if (beforeStart(s)) { b.disabled = true; notes.push('vor dem Startdatum'); }
+        const on = selected.has(s);
+        b.classList.toggle('is-selected', on);
+        b.setAttribute('aria-pressed', on);
+        b.setAttribute('aria-label', `${label(s)} ${notes.join(', ')}`.trim());
+        if (notes.length) b.title = notes.join(' · ');
+        grid.appendChild(b);
+      }
+    }
+
+    function renderSummary() {
+      const sorted = [...selected].sort();
+      datesField.value = sorted.join(',');
+      datesField.dispatchEvent(new Event('change', { bubbles: true }));
+      const n = sorted.length;
+      submitBtn.disabled = n === 0;
+      submitBtn.textContent = n === 0 ? 'Bitte Tage wählen'
+        : n === 1 ? `Speichern für ${label(sorted[0])}` : `Speichern für ${n} Tage`;
+
+      summary.innerHTML = '';
+      if (n === 0) {
+        summary.innerHTML = '<span class="text-muted">Noch kein Tag gewählt.</span>';
+        return;
+      }
+      const list = document.createElement('div');
+      list.className = 'd-flex flex-wrap gap-1';
+      for (const s of sorted) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'zf-chip' + (ENTRIES[s] ? ' has-entry' : '');
+        chip.textContent = label(s) + ' ×';
+        chip.setAttribute('aria-label', `${label(s)} entfernen`);
+        chip.addEventListener('click', () => { selected.delete(s); update(); });
+        list.appendChild(chip);
+      }
+      summary.appendChild(list);
+
+      const hints = [];
+      const overwrite = sorted.filter(s => ENTRIES[s]).length;
+      if (overwrite) hints.push(n === 1 ? 'Der vorhandene Eintrag wird ersetzt.'
+        : overwrite === 1 ? '1 gewählter Tag hat schon einen Eintrag – er wird ersetzt.'
+        : `${overwrite} gewählte Tage haben schon Einträge – sie werden ersetzt.`);
+      const weekend = sorted.filter(isWeekend).length;
+      if (weekend && kind() !== 'work') hints.push(`${weekend === 1 ? '1 Wochenendtag wird' : weekend + ' Wochenendtage werden'} bei Urlaub/Krank übersprungen.`);
+      for (const h of hints) {
+        const p = document.createElement('div');
+        p.className = 'zf-help mt-2';
+        p.textContent = '⚠ ' + h;
+        summary.appendChild(p);
+      }
+    }
+
+    function update() { renderCalendar(); renderSummary(); }
+
+    function addRange(a, b) {
+      let [from, to] = a <= b ? [a, b] : [b, a];
+      for (let d = parse(from); iso(d) <= to; d.setDate(d.getDate() + 1)) {
+        const s = iso(d);
+        if (isWorkday(s) && !beforeStart(s)) selected.add(s);
+      }
+    }
+
+    grid.addEventListener('click', ev => {
+      const b = ev.target.closest('.zf-cal-day');
+      if (!b || b.disabled) return;
+      const s = b.dataset.date;
+      if (mode() === 'range') {
+        if (!anchor) { anchor = s; }
+        else { addRange(anchor, s); anchor = null; }
+      } else if (ev.shiftKey && anchor) {
+        addRange(anchor, s);
+      } else {
+        selected.has(s) ? selected.delete(s) : selected.add(s);
+        anchor = s;
+      }
+      update();
+    });
+
+    document.getElementById('calPrev').addEventListener('click', () => { viewM--; if (viewM < 0) { viewM = 11; viewY--; } renderCalendar(); });
+    document.getElementById('calNext').addEventListener('click', () => { viewM++; if (viewM > 11) { viewM = 0; viewY++; } renderCalendar(); });
+    document.getElementById('pickToday').addEventListener('click', () => {
+      if (!beforeStart(TODAY)) selected.add(TODAY);
+      const t = parse(TODAY); viewY = t.getFullYear(); viewM = t.getMonth();
+      update();
+    });
+    document.getElementById('pickWeek').addEventListener('click', () => {
+      const t = parse(TODAY);
+      const mon = new Date(t); mon.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+      const fri = new Date(mon); fri.setDate(mon.getDate() + 4);
+      addRange(iso(mon), iso(fri));
+      viewY = t.getFullYear(); viewM = t.getMonth();
+      update();
+    });
+    document.getElementById('pickClear').addEventListener('click', () => { selected.clear(); anchor = null; update(); });
+    form.querySelectorAll('input[name="calMode"]').forEach(r => r.addEventListener('change', () => {
+      anchor = null;
+      rangeHint.hidden = mode() !== 'range';
+      renderCalendar();
+    }));
+
+    // Art: Arbeitszeit nur bei Arbeit zeigen.
+    const workSection = document.getElementById('workSection');
+    const absenceHint = document.getElementById('absenceHint');
+    function onKind() {
+      const isWork = kind() === 'work';
+      workSection.hidden = !isWork;
+      absenceHint.hidden = isWork;
+      renderSummary();
+    }
+    form.querySelectorAll('input[name="kind"]').forEach(r => r.addEventListener('change', onKind));
+
+    const preset = document.getElementById('presetLast');
+    if (preset) preset.addEventListener('click', () => {
+      document.getElementById('workFields').setWindows(JSON.parse(preset.dataset.windows));
+    });
+
+    onKind();
+    update();
+  })();
+</script>
 {% endblock %}

@@ -206,6 +206,14 @@ def register_context(app: Flask) -> None:
             "idle_timeout_seconds": app.config["IDLE_TIMEOUT_SECONDS"],
         }
 
+    # Anzeigeformate (UI-1, UI-2): Dauern als h:mm, Daten deutsch.
+    app.add_template_filter(logic.format_hm, "hm")
+    app.add_template_filter(lambda h: logic.format_hm(h, signed=True), "hm_signed")
+    app.add_template_filter(logic.format_number, "zahl")
+    app.add_template_filter(logic.format_date, "datum")
+    app.add_template_filter(logic.format_day, "tag")
+    app.add_template_filter(logic.format_long_date, "langdatum")
+
 
 # ---------------------------------------------------------------------------
 # Zeitfenster-Formularfelder
@@ -276,9 +284,8 @@ def parse_start(form) -> tuple[Optional[date], float, Optional[str]]:
     Gibt (Startdatum, Übertrag, Fehler) zurück.
     """
     date_str = (form.get("start_date") or "").strip()
-    balance_str = (form.get("start_balance") or "").strip().replace(",", ".")
     try:
-        balance = float(balance_str) if balance_str else 0.0
+        balance = logic.parse_hours(form.get("start_balance") or "")
     except ValueError:
         return None, 0.0, "Ungültiger Übertrag."
     if not date_str:
@@ -347,7 +354,7 @@ def running_total(user: User) -> tuple[float, date]:
 def before_start_error(user: User, d: date) -> Optional[str]:
     if user.start_date is not None and d < user.start_date:
         return (
-            f"Vor dem Startdatum ({user.start_date.isoformat()}) "
+            f"Vor dem Startdatum ({logic.format_date(user.start_date)}) "
             "können keine Einträge gemacht werden."
         )
     return None
@@ -361,14 +368,15 @@ def before_start_error(user: User, d: date) -> Optional[str]:
 def register_routes(app: Flask) -> None:
     @app.route("/")
     def index():
-        ident = current_identity()
-        if ident == "admin":
-            return redirect(url_for("admin"))
-        user = current_user()
-        if user:
-            return redirect(url_for("user_dashboard", user_id=user.id))
+        # Immer die Namensauswahl, auch mit aktiver Identität (UI-3): am
+        # gemeinsamen Gerät führt „Zeiterfassung“ oben links zurück zur Auswahl.
         users = User.query.filter_by(active=True).order_by(User.name).all()
-        return render_template("index.html", users=users)
+        # Wer gerade eingestempelt ist, zeigt die Kachel an (UI-3).
+        running = {
+            wd.user_id: wd.start_time
+            for wd in WorkDay.query.filter_by(date=date.today(), end_time=None)
+        }
+        return render_template("index.html", users=users, running=running)
 
     @app.post("/switch")
     def switch():
@@ -408,6 +416,32 @@ def register_routes(app: Flask) -> None:
                 abort(404)
             return user
         abort(403)
+
+    def _today_summary(user: User, shown: logic.MonthSummary) -> logic.DaySummary:
+        """Tageszusammenfassung für heute, auch wenn ein anderer Monat angezeigt wird."""
+        today = date.today()
+        if (shown.year, shown.month) != (today.year, today.month):
+            workdays = WorkDay.query.filter_by(user_id=user.id, date=today).all()
+            absences = Absence.query.filter_by(user_id=user.id, date=today).all()
+            shown = logic.build_month_summary(
+                user, today.year, today.month, workdays, absences
+            )
+        return next(d for d in shown.days if d.date == today)
+
+    def _clock_block_reason(user: User, today_day: logic.DaySummary) -> Optional[str]:
+        """Warum heute nicht gestempelt werden kann (None = Stempeln möglich)."""
+        if current_identity() == "admin":
+            return (
+                "Stempeln kann nur die Nutzerin selbst. "
+                "Als Admin kannst du Einträge über „Ändern“ korrigieren."
+            )
+        if today_day.kind == "holiday":
+            return f"Heute ist Feiertag ({today_day.note})." if today_day.note else "Heute ist Feiertag."
+        if today_day.kind == "vacation":
+            return "Für heute ist Urlaub eingetragen."
+        if today_day.kind == "sick":
+            return "Für heute ist Krank eingetragen."
+        return before_start_error(user, today_day.date)
 
     @app.route("/user/<int:user_id>")
     def user_dashboard(user_id: int):
@@ -453,9 +487,32 @@ def register_routes(app: Flask) -> None:
         prev_year, prev_month = logic.shift_month(year, month, -1)
         next_year, next_month = logic.shift_month(year, month, +1)
 
+        today_day = _today_summary(user, summary)
+        # Offenes Zeitfenster von einem früheren Tag: blockiert das Stempeln
+        # (ERF-12), deshalb oben als Hinweis zum Nachtragen (UI-7).
+        stale_open = (
+            WorkDay.query.filter(
+                WorkDay.user_id == user.id,
+                WorkDay.date < date.today(),
+                WorkDay.end_time.is_(None),
+            )
+            .order_by(WorkDay.date)
+            .first()
+        )
+        clock_block = _clock_block_reason(user, today_day)
+        if stale_open and not clock_block:
+            clock_block = (
+                f"Erst die fehlende Endzeit vom {logic.format_day(stale_open.date)} "
+                "nachtragen, dann ist Einstempeln wieder möglich."
+            )
+
         return render_template(
             "user_dashboard.html",
             user=user,
+            today_day=today_day,
+            stale_open=stale_open,
+            clock_block=clock_block,
+            is_admin=current_identity() == "admin",
             summary=summary,
             year_summary=year_summary,
             running_total=total,
@@ -468,201 +525,190 @@ def register_routes(app: Flask) -> None:
             next_month=next_month,
         )
 
-    @app.route("/user/<int:user_id>/entry", methods=["GET", "POST"])
-    def entry_form(user_id: int):
-        user = _ensure_self(user_id)
-        prefill_date = request.args.get("date") or request.form.get("date")
+    # ----- Eintragen: ein Formular für einen oder mehrere Tage -----
 
-        def render_form(windows=None):
-            return render_template(
-                "entry_form.html",
-                user=user,
-                prefill_date=prefill_date,
-                windows=windows or DEFAULT_WINDOWS,
+    def _render_entry_form(
+        user: User,
+        dates: list[str],
+        kind: str = "work",
+        windows: Optional[list[tuple[str, str]]] = None,
+        editing: bool = False,
+    ):
+        """Eintragsformular mit Kalender. Liefert dem Kalender Feiertage und
+        vorhandene Einträge, damit Überschreiben sichtbar ist."""
+        today = date.today()
+        years = range(today.year - 1, today.year + 2)
+        holidays_map = {
+            d.isoformat(): name
+            for y in years
+            for d, name in logic.holidays_sachsen_anhalt(y).items()
+        }
+        first, last = date(years[0], 1, 1), date(years[-1], 12, 31)
+        entries: dict[str, str] = {}
+        for wd in WorkDay.query.filter(
+            WorkDay.user_id == user.id, WorkDay.date >= first, WorkDay.date <= last
+        ):
+            entries[wd.date.isoformat()] = "work"
+        for ab in Absence.query.filter(
+            Absence.user_id == user.id, Absence.date >= first, Absence.date <= last
+        ):
+            entries[ab.date.isoformat()] = (
+                "vacation" if ab.kind == Absence.KIND_VACATION else "sick"
             )
+        return render_template(
+            "entry_form.html",
+            user=user,
+            dates=dates,
+            kind=kind,
+            windows=windows or DEFAULT_WINDOWS,
+            holidays_json=json.dumps(holidays_map),
+            entries_json=json.dumps(entries),
+            last_workday=_last_workday(user, today),
+            editing=editing,
+        )
 
-        if request.method == "POST":
-            kind = request.form.get("kind", "work")
-            date_str = request.form.get("date", "").strip()
+    def _last_workday(user: User, before: date) -> Optional[dict]:
+        """Letzter abgeschlossener Arbeitstag vor `before` als Vorlage (ERF-16)."""
+        latest = (
+            db.session.query(db.func.max(WorkDay.date))
+            .filter(
+                WorkDay.user_id == user.id,
+                WorkDay.date < before,
+                WorkDay.end_time.isnot(None),
+            )
+            .scalar()
+        )
+        if latest is None:
+            return None
+        rows = (
+            WorkDay.query.filter_by(user_id=user.id, date=latest)
+            .order_by(WorkDay.start_time)
+            .all()
+        )
+        if any(w.end_time is None for w in rows):
+            return None
+        return {
+            "date": latest,
+            "windows": [
+                (w.start_time.strftime("%H:%M"), w.end_time.strftime("%H:%M"))
+                for w in rows
+            ],
+        }
+
+    def _tage(n: int, wort: str = "Tag") -> str:
+        return f"{n} {wort}" if n == 1 else f"{n} {wort}e"
+
+    def _save_entries(user: User):
+        """Speichert Arbeit oder Abwesenheit für einen oder mehrere Tage.
+
+        Ein Tag: Urlaub/Krank am Wochenende wird abgelehnt; mehrere Tage:
+        solche Tage werden mit Hinweis übersprungen (ERF-7). Bei einem
+        Validierungsfehler wird nichts gespeichert (ERF-10).
+        """
+        kind = request.form.get("kind", "work")
+        # "dates" (Kalender, mehrere) oder "date" (ein Tag, ältere Formulare).
+        dates_raw = request.form.get("dates") or request.form.get("date", "")
+        tokens = [t for t in re.split(r"[,\s;]+", dates_raw) if t]
+        _, raw_windows, _ = parse_windows(request.form)
+
+        def fail(msg: str):
+            flash(msg, "danger")
+            return _render_entry_form(user, tokens, kind, raw_windows)
+
+        parsed: list[date] = []
+        for t in tokens:
             try:
-                entry_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                parsed.append(datetime.strptime(t, "%Y-%m-%d").date())
             except ValueError:
-                flash("Ungültiges Datum.", "danger")
-                return render_form()
-            error = before_start_error(user, entry_date)
+                return fail(f"Ungültiges Datum: {t}")
+        unique_dates = sorted(set(parsed))
+        if not unique_dates:
+            return fail("Bitte mindestens ein Datum auswählen.")
+        if user.start_date is not None:
+            before = [d for d in unique_dates if d < user.start_date]
+            unique_dates = [d for d in unique_dates if d >= user.start_date]
+            if not unique_dates:
+                return fail(before_start_error(user, before[0]))
+            if before:
+                flash(f"{_tage(len(before))} vor dem Startdatum übersprungen.", "info")
+
+        def target(n: int) -> str:
+            return logic.format_date(unique_dates[0]) if n == 1 else _tage(n)
+
+        if kind == "work":
+            windows, _, error = parse_windows(request.form)
             if error:
-                flash(error, "danger")
-                return render_form()
+                return fail(error)
+            for d in unique_dates:
+                replace_windows(user.id, d, windows)
+            db.session.commit()
+            flash(f"Arbeitszeit für {target(len(unique_dates))} gespeichert.", "success")
 
-            existing_abs = Absence.query.filter_by(
-                user_id=user.id, date=entry_date
-            ).first()
-
-            if kind == "work":
-                windows, raw, error = parse_windows(request.form)
-                if error:
-                    flash(error, "danger")
-                    return render_form(raw)
-
-                replace_windows(user.id, entry_date, windows)
-                db.session.commit()
-                flash(f"Arbeitszeit für {entry_date.isoformat()} gespeichert.", "success")
-
-            elif kind in (Absence.KIND_VACATION, Absence.KIND_SICK):
-                if entry_date.weekday() >= 5:
-                    flash(
-                        "Urlaub/Krank kann nur an Werktagen (Mo–Fr) eingetragen werden.",
-                        "danger",
-                    )
-                    return render_form()
-                WorkDay.query.filter_by(user_id=user.id, date=entry_date).delete()
+        elif kind in (Absence.KIND_VACATION, Absence.KIND_SICK):
+            # Urlaub/Krank gibt es nur an Werktagen; Wochenendtage überspringen.
+            absence_dates = [d for d in unique_dates if d.weekday() < 5]
+            skipped = len(unique_dates) - len(absence_dates)
+            if not absence_dates:
+                return fail("Urlaub/Krank kann nur an Werktagen (Mo–Fr) eingetragen werden.")
+            for d in absence_dates:
+                WorkDay.query.filter_by(user_id=user.id, date=d).delete()
+                existing_abs = Absence.query.filter_by(user_id=user.id, date=d).first()
                 if existing_abs:
                     existing_abs.kind = kind
                 else:
-                    db.session.add(
-                        Absence(user_id=user.id, date=entry_date, kind=kind)
-                    )
-                db.session.commit()
-                label = "Urlaub" if kind == Absence.KIND_VACATION else "Krankheit"
-                flash(
-                    f"{label} für {entry_date.isoformat()} gespeichert.", "success"
-                )
+                    db.session.add(Absence(user_id=user.id, date=d, kind=kind))
+            db.session.commit()
+            label = "Urlaub" if kind == Absence.KIND_VACATION else "Krankheit"
+            if len(absence_dates) == 1:
+                flash(f"{label} für {logic.format_date(absence_dates[0])} gespeichert.", "success")
             else:
-                flash("Unbekannter Eintragstyp.", "danger")
-                return render_form()
+                flash(f"{label} für {_tage(len(absence_dates))} gespeichert.", "success")
+            if skipped:
+                flash(f"{_tage(skipped, 'Wochenendtag')} übersprungen.", "info")
+        else:
+            return fail("Unbekannter Eintragstyp.")
 
-            return redirect(
-                url_for(
-                    "user_dashboard",
-                    user_id=user.id,
-                    year=entry_date.year,
-                    month=entry_date.month,
-                )
+        first = unique_dates[0]
+        return redirect(
+            url_for("user_dashboard", user_id=user.id, year=first.year, month=first.month)
+        )
+
+    @app.route("/user/<int:user_id>/entry", methods=["GET", "POST"])
+    def entry_form(user_id: int):
+        user = _ensure_self(user_id)
+        if request.method == "POST":
+            return _save_entries(user)
+
+        # ?date=… (z. B. „Ändern“ in der Tagesliste): Tag vorauswählen und
+        # vorhandene Zeitfenster bzw. Abwesenheit vorbelegen. Ohne Datum: heute.
+        try:
+            d = datetime.strptime(request.args.get("date", ""), "%Y-%m-%d").date()
+        except ValueError:
+            d = date.today()
+        kind = "work"
+        windows = [
+            (
+                w.start_time.strftime("%H:%M"),
+                w.end_time.strftime("%H:%M") if w.end_time else "",
             )
-
-        # Beim Bearbeiten eines Tages die vorhandenen Zeitfenster vorbelegen.
-        existing: list[tuple[str, str]] = []
-        if prefill_date:
-            try:
-                d = datetime.strptime(prefill_date, "%Y-%m-%d").date()
-            except ValueError:
-                d = None
-            if d:
-                existing = [
-                    (
-                        w.start_time.strftime("%H:%M"),
-                        w.end_time.strftime("%H:%M") if w.end_time else "",
-                    )
-                    for w in WorkDay.query.filter_by(user_id=user.id, date=d)
-                    .order_by(WorkDay.start_time)
-                    .all()
-                ]
-        return render_form(existing)
+            for w in WorkDay.query.filter_by(user_id=user.id, date=d)
+            .order_by(WorkDay.start_time)
+            .all()
+        ]
+        absence = Absence.query.filter_by(user_id=user.id, date=d).first()
+        if absence:
+            kind = "vacation" if absence.kind == Absence.KIND_VACATION else "sick"
+        return _render_entry_form(
+            user, [d.isoformat()], kind, windows, editing=bool(windows or absence)
+        )
 
     @app.route("/user/<int:user_id>/bulk-entry", methods=["GET", "POST"])
     def bulk_entry_form(user_id: int):
+        """Früherer Sammeleintrag; jetzt Teil von entry_form."""
         user = _ensure_self(user_id)
-
-        # Feiertage der aktuell relevanten Jahre vorbereiten (Anzeige im Formular).
-        today = date.today()
-        years = {today.year, today.year - 1, today.year + 1}
-        holidays_map: dict[str, str] = {}
-        for y in years:
-            for d, name in logic.holidays_sachsen_anhalt(y).items():
-                holidays_map[d.isoformat()] = name
-
-        def render_form(windows=None):
-            return render_template(
-                "bulk_entry_form.html",
-                user=user,
-                holidays_json=json.dumps(holidays_map),
-                windows=windows or DEFAULT_WINDOWS,
-            )
-
         if request.method == "POST":
-            kind = request.form.get("kind", "work")
-            dates_raw = request.form.get("dates", "")
-
-            tokens = [s for s in re.split(r"[,\s;]+", dates_raw) if s]
-            parsed_dates: list[date] = []
-            for s in tokens:
-                try:
-                    parsed_dates.append(datetime.strptime(s, "%Y-%m-%d").date())
-                except ValueError:
-                    flash(f"Ungültiges Datum: {s}", "danger")
-                    return render_form()
-
-            unique_dates = sorted(set(parsed_dates))
-            if not unique_dates:
-                flash("Bitte mindestens ein Datum auswählen.", "danger")
-                return render_form()
-            if user.start_date is not None:
-                before = [d for d in unique_dates if d < user.start_date]
-                unique_dates = [d for d in unique_dates if d >= user.start_date]
-                if not unique_dates:
-                    flash(before_start_error(user, before[0]), "danger")
-                    return render_form()
-                if before:
-                    flash(f"{len(before)} Tag(e) vor dem Startdatum übersprungen.", "info")
-
-            if kind == "work":
-                windows, raw, error = parse_windows(request.form)
-                if error:
-                    flash(error, "danger")
-                    return render_form(raw)
-
-                for d in unique_dates:
-                    replace_windows(user.id, d, windows)
-                db.session.commit()
-                flash(
-                    f"Arbeitszeit für {len(unique_dates)} Tag(e) gespeichert.",
-                    "success",
-                )
-
-            elif kind in (Absence.KIND_VACATION, Absence.KIND_SICK):
-                # Urlaub/Krank gibt es nur an Werktagen; Wochenendtage überspringen.
-                absence_dates = [d for d in unique_dates if d.weekday() < 5]
-                skipped = len(unique_dates) - len(absence_dates)
-                if not absence_dates:
-                    flash(
-                        "Urlaub/Krank kann nur an Werktagen (Mo–Fr) eingetragen werden.",
-                        "danger",
-                    )
-                    return render_form()
-                for d in absence_dates:
-                    WorkDay.query.filter_by(user_id=user.id, date=d).delete()
-                    existing_abs = Absence.query.filter_by(
-                        user_id=user.id, date=d
-                    ).first()
-                    if existing_abs:
-                        existing_abs.kind = kind
-                    else:
-                        db.session.add(
-                            Absence(user_id=user.id, date=d, kind=kind)
-                        )
-                db.session.commit()
-                label = "Urlaub" if kind == Absence.KIND_VACATION else "Krankheit"
-                flash(
-                    f"{label} für {len(absence_dates)} Tag(e) gespeichert.",
-                    "success",
-                )
-                if skipped:
-                    flash(f"{skipped} Wochenendtag(e) übersprungen.", "info")
-            else:
-                flash("Unbekannter Eintragstyp.", "danger")
-                return render_form()
-
-            first = unique_dates[0]
-            return redirect(
-                url_for(
-                    "user_dashboard",
-                    user_id=user.id,
-                    year=first.year,
-                    month=first.month,
-                )
-            )
-
-        return render_form()
+            return _save_entries(user)
+        return redirect(url_for("entry_form", user_id=user.id))
 
     # ----- Anfang/Ende stempeln (heute, auf 15 min gerundet) -----
 
@@ -672,9 +718,22 @@ def register_routes(app: Flask) -> None:
             url_for("user_dashboard", user_id=user.id, year=today.year, month=today.month)
         )
 
+    def _ensure_can_clock(user_id: int) -> tuple[User, Optional[str]]:
+        """Stempeln darf nur die Nutzerin selbst, nicht Admin (NUTZ-10)."""
+        user = _ensure_self(user_id)
+        if current_identity() == "admin":
+            return user, (
+                "Als Admin kann nicht gestempelt werden. "
+                "Einträge bitte über „Ändern“ korrigieren."
+            )
+        return user, None
+
     @app.post("/user/<int:user_id>/clock/start")
     def clock_start(user_id: int):
-        user = _ensure_self(user_id)
+        user, error = _ensure_can_clock(user_id)
+        if error:
+            flash(error, "danger")
+            return _redirect_today(user)
         now = datetime.now()
         today = now.date()
         start_t = logic.round_to_quarter(now)
@@ -696,7 +755,7 @@ def register_routes(app: Flask) -> None:
         ).first()
         if other_open:
             flash(
-                f"Vom {other_open.date.isoformat()} läuft noch ein Zeitfenster – "
+                f"Vom {logic.format_date(other_open.date)} läuft noch ein Zeitfenster – "
                 "bitte dort zuerst über „Ändern“ eine Endzeit setzen.",
                 "danger",
             )
@@ -719,7 +778,10 @@ def register_routes(app: Flask) -> None:
 
     @app.post("/user/<int:user_id>/clock/end")
     def clock_end(user_id: int):
-        user = _ensure_self(user_id)
+        user, error = _ensure_can_clock(user_id)
+        if error:
+            flash(error, "danger")
+            return _redirect_today(user)
         now = datetime.now()
         today = now.date()
         end_t = logic.round_to_quarter(now)
@@ -753,83 +815,92 @@ def register_routes(app: Flask) -> None:
         WorkDay.query.filter_by(user_id=user.id, date=d).delete()
         Absence.query.filter_by(user_id=user.id, date=d).delete()
         db.session.commit()
-        flash(f"Eintrag für {d.isoformat()} entfernt.", "info")
+        flash(f"Eintrag für {logic.format_date(d)} entfernt.", "info")
         return redirect(
             url_for("user_dashboard", user_id=user.id, year=d.year, month=d.month)
         )
 
     # ----- Admin-Flows -----
 
+    def _month_summary(user: User, year: int, month: int) -> logic.MonthSummary:
+        start = date(year, month, 1)
+        end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        workdays = WorkDay.query.filter(
+            WorkDay.user_id == user.id, WorkDay.date >= start, WorkDay.date < end
+        ).all()
+        absences = Absence.query.filter(
+            Absence.user_id == user.id, Absence.date >= start, Absence.date < end
+        ).all()
+        return logic.build_month_summary(user, year, month, workdays, absences)
+
     @app.route("/admin")
     @require_identity("admin")
     def admin():
-        users = User.query.order_by(User.name).all()
         today = date.today()
+        users = User.query.order_by(User.name).all()
         rows = []
         for u in users:
-            year, month = today.year, today.month
-            start = date(year, month, 1)
-            if month == 12:
-                end_exclusive = date(year + 1, 1, 1)
-            else:
-                end_exclusive = date(year, month + 1, 1)
-            workdays = WorkDay.query.filter(
-                WorkDay.user_id == u.id,
-                WorkDay.date >= start,
-                WorkDay.date < end_exclusive,
-            ).all()
-            absences = Absence.query.filter(
-                Absence.user_id == u.id,
-                Absence.date >= start,
-                Absence.date < end_exclusive,
-            ).all()
-            summary = logic.build_month_summary(u, year, month, workdays, absences)
             total, since = running_total(u)
-            rows.append({"user": u, "summary": summary, "total": total, "since": since})
+            rows.append({
+                "user": u,
+                "summary": _month_summary(u, today.year, today.month),
+                "total": total,
+                "since": since,
+            })
+        active_rows = [r for r in rows if r["user"].active]
         return render_template(
             "admin.html",
-            rows=rows,
+            rows=active_rows,
+            inactive_rows=[r for r in rows if not r["user"].active],
+            # Summe der Salden aller aktiven Nutzerinnen (NUTZ-12)
+            team_total=sum(r["total"] for r in active_rows),
+            team_month=sum(r["summary"].saldo for r in active_rows),
             year=today.year,
             month=today.month,
-            yearly_reset=yearly_reset_enabled(),
         )
 
-    @app.post("/admin/settings")
+    @app.route("/admin/settings", methods=["GET", "POST"])
     @require_identity("admin")
     def admin_settings():
-        yearly_reset = request.form.get("yearly_reset") == "1"
-        Setting.set_bool(Setting.YEARLY_RESET, yearly_reset)
-        db.session.commit()
-        flash(
-            "Saldo wird zum Jahreswechsel auf 0 gesetzt."
-            if yearly_reset
-            else "Saldo wird ins neue Jahr übernommen.",
-            "success",
-        )
-        return redirect(url_for("admin"))
+        if request.method == "POST":
+            yearly_reset = request.form.get("yearly_reset") == "1"
+            Setting.set_bool(Setting.YEARLY_RESET, yearly_reset)
+            db.session.commit()
+            flash(
+                "Saldo wird zum Jahreswechsel auf 0 gesetzt."
+                if yearly_reset
+                else "Saldo wird ins neue Jahr übernommen.",
+                "success",
+            )
+            return redirect(url_for("admin_settings"))
+        return render_template("admin_settings.html", yearly_reset=yearly_reset_enabled())
+
+    def _parse_weekly_hours(raw: str) -> tuple[Optional[float], Optional[str]]:
+        try:
+            hours = float(raw.strip().replace(",", "."))
+        except ValueError:
+            return None, "Ungültige Wochenstunden."
+        if hours <= 0 or hours > 60:
+            return None, "Wochenstunden müssen zwischen 0 und 60 liegen."
+        return hours, None
 
     @app.post("/admin/users")
     @require_identity("admin")
     def admin_create_user():
         name = (request.form.get("name") or "").strip()
-        try:
-            weekly_hours = float(request.form.get("weekly_hours", "40").replace(",", "."))
-        except ValueError:
-            flash("Ungültige Wochenstunden.", "danger")
-            return redirect(url_for("admin"))
-        if not name:
-            flash("Name darf nicht leer sein.", "danger")
-            return redirect(url_for("admin"))
-        if weekly_hours <= 0 or weekly_hours > 60:
-            flash("Wochenstunden müssen zwischen 0 und 60 liegen.", "danger")
-            return redirect(url_for("admin"))
+        weekly_hours, error = _parse_weekly_hours(request.form.get("weekly_hours", "40"))
+        if not error and not name:
+            error = "Name darf nicht leer sein."
+        if error:
+            flash(error, "danger")
+            return redirect(url_for("admin", _anchor="neu"))
         start_date, start_balance, error = parse_start(request.form)
         if error:
             flash(error, "danger")
-            return redirect(url_for("admin"))
+            return redirect(url_for("admin", _anchor="neu"))
         if User.query.filter_by(name=name).first():
             flash("Eine Nutzerin mit diesem Namen existiert bereits.", "warning")
-            return redirect(url_for("admin"))
+            return redirect(url_for("admin", _anchor="neu"))
         db.session.add(
             User(
                 name=name,
@@ -843,13 +914,59 @@ def register_routes(app: Flask) -> None:
         flash(f"Nutzerin „{name}“ angelegt.", "success")
         return redirect(url_for("admin"))
 
-    @app.post("/admin/users/<int:user_id>")
+    def _render_user_detail(user: User, form: Optional[dict] = None, status: int = 200):
+        today = date.today()
+        total, since = running_total(user)
+        if form is None:
+            form = {
+                "name": user.name,
+                "weekly_hours": logic.format_number(user.weekly_hours),
+                "start_date": user.start_date.isoformat() if user.start_date else "",
+                "start_balance": (
+                    logic.format_hm(user.start_balance, signed=True) if user.start_date else ""
+                ),
+            }
+        return render_template(
+            "admin_user.html",
+            user=user,
+            form=form,
+            summary=_month_summary(user, today.year, today.month),
+            total=total,
+            since=since,
+        ), status
+
+    @app.route("/admin/users/<int:user_id>", methods=["GET", "POST"])
     @require_identity("admin")
-    def admin_update_user(user_id: int):
+    def admin_user(user_id: int):
         user = db.session.get(User, user_id)
         if not user:
             abort(404)
+        if request.method == "GET":
+            return _render_user_detail(user)
+
         action = request.form.get("action", "update")
+        if action == "save":
+            # Detailseite: alle Stammdaten in einem Formular (NUTZ-5).
+            name = (request.form.get("name") or "").strip()
+            weekly_hours, error = _parse_weekly_hours(request.form.get("weekly_hours", ""))
+            start_date, start_balance, start_error = parse_start(request.form)
+            error = error or start_error
+            if not error and not name:
+                error = "Name darf nicht leer sein."
+            if not error and User.query.filter(User.name == name, User.id != user.id).first():
+                error = "Eine Nutzerin mit diesem Namen existiert bereits."
+            if error:
+                flash(error, "danger")
+                return _render_user_detail(user, dict(request.form), 400)
+            user.name = name
+            user.weekly_hours = weekly_hours
+            user.start_date = start_date
+            user.start_balance = start_balance
+            db.session.commit()
+            flash(f"Nutzerin „{user.name}“ gespeichert.", "success")
+            return redirect(url_for("admin_user", user_id=user.id))
+
+        # Einzelaktionen (Aktivieren/Deaktivieren und ältere Formulare).
         if action == "deactivate":
             user.active = False
         elif action == "activate":
@@ -858,24 +975,25 @@ def register_routes(app: Flask) -> None:
             start_date, start_balance, error = parse_start(request.form)
             if error:
                 flash(error, "danger")
-                return redirect(url_for("admin"))
+                return redirect(url_for("admin_user", user_id=user.id))
             user.start_date = start_date
             user.start_balance = start_balance
         else:
-            try:
-                weekly_hours = float(
-                    request.form.get("weekly_hours", str(user.weekly_hours)).replace(",", ".")
-                )
-            except ValueError:
-                flash("Ungültige Wochenstunden.", "danger")
-                return redirect(url_for("admin"))
-            if weekly_hours <= 0 or weekly_hours > 60:
-                flash("Wochenstunden müssen zwischen 0 und 60 liegen.", "danger")
-                return redirect(url_for("admin"))
+            weekly_hours, error = _parse_weekly_hours(
+                request.form.get("weekly_hours", str(user.weekly_hours))
+            )
+            if error:
+                flash(error, "danger")
+                return redirect(url_for("admin_user", user_id=user.id))
             user.weekly_hours = weekly_hours
         db.session.commit()
-        flash(f"Nutzerin „{user.name}“ aktualisiert.", "success")
-        return redirect(url_for("admin"))
+        if action == "deactivate":
+            flash(f"Nutzerin „{user.name}“ deaktiviert. Ihre Daten bleiben erhalten.", "success")
+        elif action == "activate":
+            flash(f"Nutzerin „{user.name}“ wieder aktiviert.", "success")
+        else:
+            flash(f"Nutzerin „{user.name}“ aktualisiert.", "success")
+        return redirect(url_for("admin_user", user_id=user.id))
 
 
 # ---------------------------------------------------------------------------

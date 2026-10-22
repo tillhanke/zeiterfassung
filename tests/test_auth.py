@@ -14,15 +14,20 @@ class TestIndex:
         assert b"Bob" in r.data
         assert b"Inaktiv" not in r.data  # inaktive User werden nicht gelistet
 
-    def test_admin_redirects_to_admin_panel(self, client, login_admin):
+    def test_admin_sees_start_page(self, client, login_admin, alice_id):
+        """UI-3: Startseite zeigt auch mit aktiver Identität die Namensauswahl."""
         r = client.get("/", follow_redirects=False)
-        assert r.status_code == 302
-        assert "/admin" in r.headers["Location"]
+        assert r.status_code == 200
+        assert b"Alice" in r.data
+        with client.session_transaction() as s:
+            assert s["identity"] == "admin"  # Identität bleibt bis „Abmelden“
 
-    def test_user_redirects_to_dashboard(self, client, login_alice):
+    def test_user_sees_start_page(self, client, login_alice):
+        """UI-3: Startseite zeigt auch mit aktiver Identität die Namensauswahl."""
         r = client.get("/", follow_redirects=False)
-        assert r.status_code == 302
-        assert f"/user/{login_alice}" in r.headers["Location"]
+        assert r.status_code == 200
+        assert b"zf-tile" in r.data
+        assert b">Abmelden</button>" in r.data
 
 
 class TestSwitch:
@@ -77,7 +82,7 @@ class TestRouteProtection:
     def test_admin_page_accessible_for_admin(self, client, login_admin):
         r = client.get("/admin")
         assert r.status_code == 200
-        assert b"Admin-Panel" in r.data
+        assert b"\xc3\x9cbersicht" in r.data
 
     def test_anonymous_cannot_access_user_dashboard(self, client, alice_id):
         r = client.get(f"/user/{alice_id}")

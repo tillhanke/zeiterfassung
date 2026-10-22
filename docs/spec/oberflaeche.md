@@ -1,0 +1,63 @@
+# Oberfläche (`UI`)
+
+Wie Zahlen, Daten und die wichtigsten Bildschirme dargestellt werden. Die
+Oberfläche ist für ein gemeinsames Gerät im Betrieb ausgelegt (PC oder
+Tablet, kioskartig).
+
+## Begriffe
+
+- **Dauer** – Arbeitszeit, Soll, Ist oder Saldo in Stunden.
+- **Karte „Heute"** – Bereich oben im Dashboard mit dem Stempelstatus des
+  heutigen Tages.
+
+## Regeln
+
+### Formate
+
+- **UI-1** – Dauern werden als Stunden und Minuten (`h:mm`) angezeigt, auf
+  volle Minuten gerundet; Uhrzeiten im 24-Stunden-Format (`HH:MM`). Salden
+  und Abweichungen tragen immer ein Vorzeichen (`+`, `−`, `±` bei null).
+  Beispiel: 7,75 h → `7:45`, −1,5 h → `−1:30`, 0 h Saldo → `±0:00`.
+  Das gilt auch für die Live-Vorschau im Eintragsformular. Eingabefelder
+  für Stunden (Übertrag) nehmen `h:mm` und Dezimalzahlen mit Komma oder
+  Punkt an: `+6:30`, `−2:30`, `6,5`. → ADR-0016
+- **UI-2** – Datumsangaben sind deutsch formatiert: `22.10.2026`, in
+  Tageslisten kurz `Do 22.10.`, in Überschriften lang
+  `Donnerstag, 22. Oktober 2026`.
+
+### Bildschirme
+
+- **UI-3** – Die Startseite zeigt die aktiven Nutzerinnen als große
+  Kacheln; eine Kachel zeigt an, wenn die Nutzerin heute gerade
+  eingestempelt ist. Der Zugang zur Verwaltung ist ein unauffälliger Link
+  darunter. Die Startseite zeigt immer die Namensauswahl, auch wenn bereits
+  eine Identität aktiv ist; „Zeiterfassung" oben links führt jederzeit
+  dorthin. Die Topbar zeigt die aktive Identität und „Abmelden" (Identität
+  verwerfen, zurück zur Startseite), aber keine Auswahlliste und keine
+  weiteren Navigationslinks. → ADR-0018
+- **UI-4** – Das Dashboard einer Nutzerin beginnt mit der Karte „Heute"
+  (Status, laufende Zeit, „Anfang"/„Ende") und dem aktuellen Gesamtsaldo.
+  Die Karte zeigt immer den heutigen Tag, auch wenn ein anderer Monat
+  angezeigt wird. Ist Stempeln nicht möglich (z. B. Feiertag, Urlaub/Krank,
+  vor dem Startdatum, Admin-Ansicht), steht dort der Grund statt des Buttons.
+  In der Tagesliste wird nicht gestempelt.
+- **UI-5** – Sieht Admin das Dashboard einer Nutzerin, steht darüber eine
+  Hinweisleiste mit ihrem Namen und einem Link zurück zur Übersicht.
+- **UI-6** – Die Übersicht des Admin-Panels zeigt oben „Neue Nutzerin
+  anlegen" (der einzige Weg zum Anlegen), darunter die Nutzerinnen mit
+  Summen (NUTZ-12). Einstellungen und die Detailseite je Nutzerin sind
+  eigene Seiten mit Link zurück zur Übersicht.
+- **UI-7** – Hat eine Nutzerin ein offenes Zeitfenster von einem früheren
+  Tag, zeigt ihr Dashboard oben einen Hinweis mit Datum, Anfangszeit und
+  „Jetzt nachtragen" (öffnet diesen Tag im Eintragsformular). Die Karte
+  „Heute" nennt dann statt „Anfang" den Grund, warum nicht gestempelt
+  werden kann (ERF-12).
+
+## Nicht im Umfang
+
+- Dunkles Farbschema.
+
+## Verweise
+
+- ADRs: 0016, 0017, 0018
+- Tests: `tests/test_ui.py`
