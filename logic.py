@@ -446,6 +446,21 @@ def format_hm(hours: float, signed: bool = False) -> str:
     return f"{sign}{h}:{m:02d}"
 
 
+def parse_hours(text: str) -> float:
+    """Stunden aus Eingabe: "6,5", "6.5", "6:30", "+6:30", "−2:30" (auch
+    typografisches Minus). Leer -> 0. Ungültig -> ValueError."""
+    t = text.strip().replace(MINUS, "-").replace(" ", "")
+    if not t:
+        return 0.0
+    if ":" in t:
+        sign = -1 if t.startswith("-") else 1
+        h, m = t.lstrip("+-").split(":")
+        if not h.isdigit() or not (m.isdigit() and len(m) == 2 and int(m) < 60):
+            raise ValueError(text)
+        return sign * (int(h) + int(m) / 60)
+    return float(t.replace(",", "."))
+
+
 def format_number(x: float) -> str:
     """Zahl mit deutschem Dezimalkomma, ohne überflüssige Nachkommastellen:
     40.0 -> "40", 38.5 -> "38,5"."""

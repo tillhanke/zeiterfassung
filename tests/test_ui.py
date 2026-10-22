@@ -65,10 +65,13 @@ class TestStartPage:
         assert ">Übersicht</a>" not in html
         assert ">Abmelden</button>" in html
 
-    def test_admin_new_user_above_settings(self, client, login_admin):
-        """UI-6: „Neue Nutzerin anlegen“ steht vor den Einstellungen."""
+    def test_admin_overview_layout(self, client, login_admin):
+        """UI-6: Übersicht mit Nutzerinnen und „Neue Nutzerin anlegen“;
+        Einstellungen auf eigener Seite, oben verlinkt."""
         html = client.get("/admin").data.decode()
-        assert html.index("Neue Nutzerin anlegen") < html.index("Einstellungen")
+        assert 'href="/admin/settings"' in html
+        assert 'id="yearly_reset"' not in html
+        assert html.index(">Nutzerinnen</h2>") < html.index(">Neue Nutzerin anlegen</h2>")
 
     def test_no_identity_dropdown_in_topbar(self, client, login_alice):
         """UI-3: Topbar zeigt die Identität und „Abmelden“, keine Auswahl."""
@@ -121,3 +124,19 @@ class TestAdminView:
     def test_user_sees_no_admin_bar(self, client, login_alice):
         html = client.get(f"/user/{login_alice}").data.decode()
         assert "Admin-Ansicht" not in html
+
+
+class TestParseHours:
+    @pytest.mark.parametrize(
+        "text, expected",
+        [("6,5", 6.5), ("6.5", 6.5), ("6:30", 6.5), ("+6:30", 6.5),
+         ("−2:30", -2.5), ("-2:30", -2.5), ("-0:15", -0.25), ("", 0.0), (" 4 ", 4.0)],
+    )
+    def test_valid(self, text, expected):
+        """UI-1: Stunden-Eingaben auch als h:mm."""
+        assert logic.parse_hours(text) == expected
+
+    @pytest.mark.parametrize("text", ["abc", "6:3", "6:75", ":30", "1:2:3"])
+    def test_invalid(self, text):
+        with pytest.raises(ValueError):
+            logic.parse_hours(text)

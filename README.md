@@ -41,8 +41,10 @@ eintragbar. Ein Admin-Panel verwaltet Nutzerinnen und ihre Wochenarbeitszeit.
   Neujahr, Heilige Drei Könige, Karfreitag, Ostermontag, Tag der Arbeit,
   Christi Himmelfahrt, Pfingstmontag, Tag der Deutschen Einheit,
   Reformationstag und beide Weihnachtsfeiertage.
-- Admin-Panel: Übersicht aller Nutzerinnen mit aktuellem Monatssaldo,
-  Wochenstunden bearbeiten, Nutzerinnen anlegen / deaktivieren / aktivieren.
+- Admin-Panel: Übersicht mit „Braucht Aufmerksamkeit" (wer ist eingestempelt,
+  offene Stempelungen, fehlende Tage), Nutzerinnen mit Monats- und
+  Gesamtsaldo, Nutzerin anlegen; Detailseite je Nutzerin (Stammdaten in einem
+  Formular, deaktivieren/aktivieren); Einstellungen auf eigener Seite.
 - Live-Vorschau der Nettoarbeitszeit beim Eintragen (Vanilla JS).
 - Oberfläche für ein gemeinsames Gerät (PC/Tablet): Namenskacheln auf der
   Startseite, Karte „Heute" mit großem Stempel-Button, Dauern als `h:mm`
@@ -177,6 +179,8 @@ zeiterf/
 │   ├── index.html
 │   ├── user_dashboard.html
 │   ├── entry_form.html    # Eintragen mit Kalender (ein oder mehrere Tage)
+│   ├── admin_user.html    # Detailseite einer Nutzerin (Verwaltung)
+│   ├── admin_settings.html # Firmeneinstellungen
 │   ├── _work_windows.html # Zeitfenster-Eingabe mit Live-Vorschau
 │   └── admin.html
 └── tests/

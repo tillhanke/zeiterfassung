@@ -278,9 +278,8 @@ def parse_start(form) -> tuple[Optional[date], float, Optional[str]]:
     Gibt (Startdatum, Übertrag, Fehler) zurück.
     """
     date_str = (form.get("start_date") or "").strip()
-    balance_str = (form.get("start_balance") or "").strip().replace(",", ".")
     try:
-        balance = float(balance_str) if balance_str else 0.0
+        balance = logic.parse_hours(form.get("start_balance") or "")
     except ValueError:
         return None, 0.0, "Ungültiger Übertrag."
     if not date_str:
@@ -799,76 +798,114 @@ def register_routes(app: Flask) -> None:
 
     # ----- Admin-Flows -----
 
+    def _month_summary(user: User, year: int, month: int) -> logic.MonthSummary:
+        start = date(year, month, 1)
+        end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        workdays = WorkDay.query.filter(
+            WorkDay.user_id == user.id, WorkDay.date >= start, WorkDay.date < end
+        ).all()
+        absences = Absence.query.filter(
+            Absence.user_id == user.id, Absence.date >= start, Absence.date < end
+        ).all()
+        return logic.build_month_summary(user, year, month, workdays, absences)
+
+    def _missing_days(user: User, today: date, days: int = 30) -> list[date]:
+        """Leere Werktage der letzten `days` Tage vor heute (ohne heute)."""
+        since = today - timedelta(days=days)
+        found: list[date] = []
+        for year, month in {(since.year, since.month), (today.year, today.month)}:
+            found += [
+                d.date
+                for d in _month_summary(user, year, month).days
+                if d.kind == "empty" and since <= d.date < today
+            ]
+        return sorted(found)
+
     @app.route("/admin")
     @require_identity("admin")
     def admin():
-        users = User.query.order_by(User.name).all()
         today = date.today()
+        users = User.query.order_by(User.name).all()
         rows = []
         for u in users:
-            year, month = today.year, today.month
-            start = date(year, month, 1)
-            if month == 12:
-                end_exclusive = date(year + 1, 1, 1)
-            else:
-                end_exclusive = date(year, month + 1, 1)
-            workdays = WorkDay.query.filter(
-                WorkDay.user_id == u.id,
-                WorkDay.date >= start,
-                WorkDay.date < end_exclusive,
-            ).all()
-            absences = Absence.query.filter(
-                Absence.user_id == u.id,
-                Absence.date >= start,
-                Absence.date < end_exclusive,
-            ).all()
-            summary = logic.build_month_summary(u, year, month, workdays, absences)
             total, since = running_total(u)
-            rows.append({"user": u, "summary": summary, "total": total, "since": since})
+            rows.append({
+                "user": u,
+                "summary": _month_summary(u, today.year, today.month),
+                "total": total,
+                "since": since,
+            })
+        active = [u for u in users if u.active]
+        # „Braucht Aufmerksamkeit“ (NUTZ-11)
+        running_now = (
+            WorkDay.query.filter_by(date=today, end_time=None)
+            .join(User).filter(User.active.is_(True))
+            .order_by(WorkDay.start_time).all()
+        )
+        stale_open = (
+            WorkDay.query.filter(WorkDay.date < today, WorkDay.end_time.is_(None))
+            .join(User).filter(User.active.is_(True))
+            .order_by(WorkDay.date).all()
+        )
+        missing = [
+            {"user": u, "dates": days}
+            for u in active
+            if (days := _missing_days(u, today))
+        ]
         return render_template(
             "admin.html",
-            rows=rows,
+            rows=[r for r in rows if r["user"].active],
+            inactive_rows=[r for r in rows if not r["user"].active],
+            running_now=running_now,
+            stale_open=stale_open,
+            missing=missing,
+            active_count=len(active),
             year=today.year,
             month=today.month,
-            yearly_reset=yearly_reset_enabled(),
         )
 
-    @app.post("/admin/settings")
+    @app.route("/admin/settings", methods=["GET", "POST"])
     @require_identity("admin")
     def admin_settings():
-        yearly_reset = request.form.get("yearly_reset") == "1"
-        Setting.set_bool(Setting.YEARLY_RESET, yearly_reset)
-        db.session.commit()
-        flash(
-            "Saldo wird zum Jahreswechsel auf 0 gesetzt."
-            if yearly_reset
-            else "Saldo wird ins neue Jahr übernommen.",
-            "success",
-        )
-        return redirect(url_for("admin"))
+        if request.method == "POST":
+            yearly_reset = request.form.get("yearly_reset") == "1"
+            Setting.set_bool(Setting.YEARLY_RESET, yearly_reset)
+            db.session.commit()
+            flash(
+                "Saldo wird zum Jahreswechsel auf 0 gesetzt."
+                if yearly_reset
+                else "Saldo wird ins neue Jahr übernommen.",
+                "success",
+            )
+            return redirect(url_for("admin_settings"))
+        return render_template("admin_settings.html", yearly_reset=yearly_reset_enabled())
+
+    def _parse_weekly_hours(raw: str) -> tuple[Optional[float], Optional[str]]:
+        try:
+            hours = float(raw.strip().replace(",", "."))
+        except ValueError:
+            return None, "Ungültige Wochenstunden."
+        if hours <= 0 or hours > 60:
+            return None, "Wochenstunden müssen zwischen 0 und 60 liegen."
+        return hours, None
 
     @app.post("/admin/users")
     @require_identity("admin")
     def admin_create_user():
         name = (request.form.get("name") or "").strip()
-        try:
-            weekly_hours = float(request.form.get("weekly_hours", "40").replace(",", "."))
-        except ValueError:
-            flash("Ungültige Wochenstunden.", "danger")
-            return redirect(url_for("admin"))
-        if not name:
-            flash("Name darf nicht leer sein.", "danger")
-            return redirect(url_for("admin"))
-        if weekly_hours <= 0 or weekly_hours > 60:
-            flash("Wochenstunden müssen zwischen 0 und 60 liegen.", "danger")
-            return redirect(url_for("admin"))
+        weekly_hours, error = _parse_weekly_hours(request.form.get("weekly_hours", "40"))
+        if not error and not name:
+            error = "Name darf nicht leer sein."
+        if error:
+            flash(error, "danger")
+            return redirect(url_for("admin", _anchor="neu"))
         start_date, start_balance, error = parse_start(request.form)
         if error:
             flash(error, "danger")
-            return redirect(url_for("admin"))
+            return redirect(url_for("admin", _anchor="neu"))
         if User.query.filter_by(name=name).first():
             flash("Eine Nutzerin mit diesem Namen existiert bereits.", "warning")
-            return redirect(url_for("admin"))
+            return redirect(url_for("admin", _anchor="neu"))
         db.session.add(
             User(
                 name=name,
@@ -882,13 +919,59 @@ def register_routes(app: Flask) -> None:
         flash(f"Nutzerin „{name}“ angelegt.", "success")
         return redirect(url_for("admin"))
 
-    @app.post("/admin/users/<int:user_id>")
+    def _render_user_detail(user: User, form: Optional[dict] = None, status: int = 200):
+        today = date.today()
+        total, since = running_total(user)
+        if form is None:
+            form = {
+                "name": user.name,
+                "weekly_hours": logic.format_number(user.weekly_hours),
+                "start_date": user.start_date.isoformat() if user.start_date else "",
+                "start_balance": (
+                    logic.format_hm(user.start_balance, signed=True) if user.start_date else ""
+                ),
+            }
+        return render_template(
+            "admin_user.html",
+            user=user,
+            form=form,
+            summary=_month_summary(user, today.year, today.month),
+            total=total,
+            since=since,
+        ), status
+
+    @app.route("/admin/users/<int:user_id>", methods=["GET", "POST"])
     @require_identity("admin")
-    def admin_update_user(user_id: int):
+    def admin_user(user_id: int):
         user = db.session.get(User, user_id)
         if not user:
             abort(404)
+        if request.method == "GET":
+            return _render_user_detail(user)
+
         action = request.form.get("action", "update")
+        if action == "save":
+            # Detailseite: alle Stammdaten in einem Formular (NUTZ-5).
+            name = (request.form.get("name") or "").strip()
+            weekly_hours, error = _parse_weekly_hours(request.form.get("weekly_hours", ""))
+            start_date, start_balance, start_error = parse_start(request.form)
+            error = error or start_error
+            if not error and not name:
+                error = "Name darf nicht leer sein."
+            if not error and User.query.filter(User.name == name, User.id != user.id).first():
+                error = "Eine Nutzerin mit diesem Namen existiert bereits."
+            if error:
+                flash(error, "danger")
+                return _render_user_detail(user, dict(request.form), 400)
+            user.name = name
+            user.weekly_hours = weekly_hours
+            user.start_date = start_date
+            user.start_balance = start_balance
+            db.session.commit()
+            flash(f"Nutzerin „{user.name}“ gespeichert.", "success")
+            return redirect(url_for("admin_user", user_id=user.id))
+
+        # Einzelaktionen (Aktivieren/Deaktivieren und ältere Formulare).
         if action == "deactivate":
             user.active = False
         elif action == "activate":
@@ -897,24 +980,25 @@ def register_routes(app: Flask) -> None:
             start_date, start_balance, error = parse_start(request.form)
             if error:
                 flash(error, "danger")
-                return redirect(url_for("admin"))
+                return redirect(url_for("admin_user", user_id=user.id))
             user.start_date = start_date
             user.start_balance = start_balance
         else:
-            try:
-                weekly_hours = float(
-                    request.form.get("weekly_hours", str(user.weekly_hours)).replace(",", ".")
-                )
-            except ValueError:
-                flash("Ungültige Wochenstunden.", "danger")
-                return redirect(url_for("admin"))
-            if weekly_hours <= 0 or weekly_hours > 60:
-                flash("Wochenstunden müssen zwischen 0 und 60 liegen.", "danger")
-                return redirect(url_for("admin"))
+            weekly_hours, error = _parse_weekly_hours(
+                request.form.get("weekly_hours", str(user.weekly_hours))
+            )
+            if error:
+                flash(error, "danger")
+                return redirect(url_for("admin_user", user_id=user.id))
             user.weekly_hours = weekly_hours
         db.session.commit()
-        flash(f"Nutzerin „{user.name}“ aktualisiert.", "success")
-        return redirect(url_for("admin"))
+        if action == "deactivate":
+            flash(f"Nutzerin „{user.name}“ deaktiviert. Ihre Daten bleiben erhalten.", "success")
+        elif action == "activate":
+            flash(f"Nutzerin „{user.name}“ wieder aktiviert.", "success")
+        else:
+            flash(f"Nutzerin „{user.name}“ aktualisiert.", "success")
+        return redirect(url_for("admin_user", user_id=user.id))
 
 
 # ---------------------------------------------------------------------------

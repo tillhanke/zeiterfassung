@@ -33,15 +33,24 @@ Verwaltung der Nutzerinnen und Firmeneinstellungen im Admin-Panel.
   Wochenstunden 0 bedeutet: kein Soll, jede Arbeit zählt als Überstunden.
   → ADR-0015
   *(offen: derzeit 0 < Wochenstunden ≤ 60)*
-- **NUTZ-5** – Wochenstunden, Startdatum und Übertrag sind nachträglich
-  änderbar und wirken rückwirkend auf alle Berechnungen.
+- **NUTZ-5** – Name, Wochenstunden, Startdatum und Übertrag sind nachträglich
+  auf der Detailseite der Nutzerin in einem Formular änderbar (ein
+  „Speichern"). Ist eine Eingabe ungültig, wird nichts geändert und die
+  Eingaben bleiben stehen. Wochenstunden, Startdatum und Übertrag wirken
+  rückwirkend auf alle Berechnungen; der Name bleibt eindeutig (NUTZ-4).
 - **NUTZ-6** – Nutzerinnen werden deaktiviert, nicht gelöscht. Deaktivierte
   erscheinen nicht in der Auswahl, ihre Daten bleiben erhalten, sie können
   wieder aktiviert werden. → ADR-0013
-- **NUTZ-7** – Das Admin-Panel zeigt alle Nutzerinnen mit Monatssaldo des
-  laufenden Monats und Gesamtsaldo.
-- **NUTZ-8** – Firmeneinstellungen: Nullstellung zum Jahreswechsel
-  (SALDO-11), Rundung beim Stempeln (ERF-15), Bundesland (FEIER-1).
+- **NUTZ-7** – Die Übersicht des Admin-Panels zeigt alle aktiven Nutzerinnen
+  mit Monatssaldo des laufenden Monats und Gesamtsaldo; deaktivierte stehen
+  eingeklappt darunter.
+- **NUTZ-8** – Firmeneinstellungen stehen auf einer eigenen Seite:
+  Nullstellung zum Jahreswechsel (SALDO-11), Rundung beim Stempeln
+  (ERF-15), Bundesland (FEIER-1).
+- **NUTZ-11** – Die Übersicht zeigt oben, was Aufmerksamkeit braucht (nur
+  aktive Nutzerinnen): wer gerade eingestempelt ist, offene Zeitfenster von
+  früheren Tagen (mit Link zum Korrigieren) und leere Werktage der letzten
+  30 Tage vor heute, ab dem Startdatum (mit Link zum Monat).
 
 ### Wartung
 

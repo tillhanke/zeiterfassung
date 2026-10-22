@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{{ user.name }} – Verwaltung{% endblock %}
+{% block content %}
+
+<a class="btn btn-link text-decoration-none px-0 mb-2" href="{{ url_for('admin') }}">← Übersicht</a>
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-4">
+  <div>
+    <h1 class="h3 mb-0">
+      {{ user.name }}
+      {% if not user.active %}<span class="zf-kind off align-middle">deaktiviert</span>{% endif %}
+    </h1>
+    <small class="text-muted">
+      Gesamtsaldo
+      <span class="{{ 'text-plus' if total >= 0 else 'text-minus' }} fw-semibold">{{ total|hm_signed }} h</span>
+      (seit {{ since|datum }}) · Saldo diesen Monat
+      <span class="{{ 'text-plus' if summary.saldo >= 0 else 'text-minus' }} fw-semibold">{{ summary.saldo|hm_signed }} h</span>
+    </small>
+  </div>
+  <a class="btn btn-outline-primary" href="{{ url_for('user_dashboard', user_id=user.id) }}">
+    Einträge ansehen / korrigieren →
+  </a>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <section class="card">
+      <div class="card-header bg-white"><h2 class="h6 mb-0">Stammdaten</h2></div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('admin_user', user_id=user.id) }}" class="row g-3">
+          <input type="hidden" name="action" value="save" />
+          <div class="col-md-8">
+            <label class="form-label" for="name">Name</label>
+            <input type="text" name="name" id="name" class="form-control" value="{{ form.name }}" required />
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="weeklyHours">Wochenstunden</label>
+            <input type="text" inputmode="decimal" name="weekly_hours" id="weeklyHours"
+                   class="form-control" value="{{ form.weekly_hours }}" required
+                   aria-describedby="weeklyHelp" />
+            <div class="form-text" id="weeklyHelp">Soll/Tag = Wochenstunden ÷ 5</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="startDate">Startdatum <span class="text-muted">(optional)</span></label>
+            <input type="date" name="start_date" id="startDate" class="form-control" value="{{ form.start_date }}" />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="startBalance">Übertrag zum Startdatum</label>
+            <input type="text" name="start_balance" id="startBalance" class="form-control"
+                   value="{{ form.start_balance }}" placeholder="z. B. +6:30 oder −2:00" />
+          </div>
+          <div class="col-12">
+            <div class="form-text mt-0 mb-3">
+              Änderungen an Wochenstunden, Startdatum und Übertrag wirken rückwirkend auf alle
+              Berechnungen. Einträge vor dem Startdatum bleiben gespeichert, zählen aber nicht.
+            </div>
+            <button class="btn btn-primary" type="submit">Speichern</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-lg-4">
+    <section class="card">
+      <div class="card-header bg-white"><h2 class="h6 mb-0">{{ 'Deaktivieren' if user.active else 'Aktivieren' }}</h2></div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('admin_user', user_id=user.id) }}">
+          {% if user.active %}
+            <p class="small text-muted">
+              {{ user.name }} erscheint dann nicht mehr auf der Startseite. Alle Daten bleiben
+              erhalten; du kannst sie jederzeit wieder aktivieren.
+            </p>
+            <input type="hidden" name="action" value="deactivate" />
+            <button class="btn btn-outline-danger" type="submit"
+                    onclick="return confirm('{{ user.name }} deaktivieren?');">Deaktivieren</button>
+          {% else %}
+            <p class="small text-muted">
+              {{ user.name }} ist deaktiviert und erscheint nicht auf der Startseite.
+            </p>
+            <input type="hidden" name="action" value="activate" />
+            <button class="btn btn-outline-success" type="submit">Wieder aktivieren</button>
+          {% endif %}
+        </form>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

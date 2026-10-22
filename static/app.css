@@ -289,3 +289,15 @@ details.zf-details > summary {
 .btn-check:checked + .zf-btn-vacation { background: var(--zf-vacation); color: #fff; border-color: var(--zf-vacation); }
 .zf-btn-sick { border-color: var(--zf-sick); color: var(--zf-sick); }
 .btn-check:checked + .zf-btn-sick { background: var(--zf-sick); color: #fff; border-color: var(--zf-sick); }
+
+/* ---------- Verwaltung ---------- */
+
+.zf-attention-count {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.card.zf-attention {
+  border-color: #fca5a5;
+  box-shadow: inset 4px 0 0 var(--zf-missing);
+}

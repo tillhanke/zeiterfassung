@@ -82,7 +82,7 @@ class TestRouteProtection:
     def test_admin_page_accessible_for_admin(self, client, login_admin):
         r = client.get("/admin")
         assert r.status_code == 200
-        assert b"Admin-Panel" in r.data
+        assert b"\xc3\x9cbersicht" in r.data
 
     def test_anonymous_cannot_access_user_dashboard(self, client, alice_id):
         r = client.get(f"/user/{alice_id}")

@@ -18,7 +18,9 @@ Tablet, kioskartig).
   volle Minuten gerundet; Uhrzeiten im 24-Stunden-Format (`HH:MM`). Salden
   und Abweichungen tragen immer ein Vorzeichen (`+`, `−`, `±` bei null).
   Beispiel: 7,75 h → `7:45`, −1,5 h → `−1:30`, 0 h Saldo → `±0:00`.
-  Das gilt auch für die Live-Vorschau im Eintragsformular. → ADR-0016
+  Das gilt auch für die Live-Vorschau im Eintragsformular. Eingabefelder
+  für Stunden (Übertrag) nehmen `h:mm` und Dezimalzahlen mit Komma oder
+  Punkt an: `+6:30`, `−2:30`, `6,5`. → ADR-0016
 - **UI-2** – Datumsangaben sind deutsch formatiert: `22.10.2026`, in
   Tageslisten kurz `Do 22.10.`, in Überschriften lang
   `Donnerstag, 22. Oktober 2026`.
@@ -42,7 +44,9 @@ Tablet, kioskartig).
 - **UI-5** – Sieht Admin das Dashboard einer Nutzerin, steht darüber eine
   Hinweisleiste mit ihrem Namen und einem Link zurück zur Übersicht.
 - **UI-6** – Das Admin-Panel ist von oben nach unten nach Häufigkeit
-  geordnet: Nutzerinnen, „Neue Nutzerin anlegen", Einstellungen.
+  geordnet: „Braucht Aufmerksamkeit" (NUTZ-11), Nutzerinnen, „Neue Nutzerin
+  anlegen". Einstellungen und die Detailseite je Nutzerin sind eigene
+  Seiten mit Link zurück zur Übersicht.
 
 ## Nicht im Umfang
 
