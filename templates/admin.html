@@ -53,14 +53,14 @@
                 <button class="btn btn-sm btn-outline-primary" type="submit">Speichern</button>
               </form>
             </td>
-            <td class="text-end">{{ '%.2f'|format(s.target_hours) }} h</td>
-            <td class="text-end">{{ '%.2f'|format(s.actual_hours) }} h</td>
-            <td class="text-end {{ 'month-saldo-positive' if s.saldo >= 0 else 'month-saldo-negative' }}">
-              {{ '%+.2f'|format(s.saldo) }} h
+            <td class="text-end">{{ s.target_hours|hm }} h</td>
+            <td class="text-end">{{ s.actual_hours|hm }} h</td>
+            <td class="text-end {{ 'text-plus' if s.saldo >= 0 else 'text-minus' }}">
+              {{ s.saldo|hm_signed }} h
             </td>
-            <td class="text-end {{ 'month-saldo-positive' if row.total >= 0 else 'month-saldo-negative' }}"
-                title="seit {{ row.since.isoformat() }}">
-              {{ '%+.2f'|format(row.total) }} h
+            <td class="text-end {{ 'text-plus' if row.total >= 0 else 'text-minus' }}"
+                title="seit {{ row.since|datum }}">
+              {{ row.total|hm_signed }} h
             </td>
             <td class="text-end">{{ s.vacation_days }} / {{ s.sick_days }}</td>
             <td>

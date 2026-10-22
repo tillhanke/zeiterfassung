@@ -13,10 +13,13 @@ Verwaltung der Nutzerinnen und Firmeneinstellungen im Admin-Panel.
 ### Zugang
 
 - **NUTZ-1** – Es gibt keinen Login. Die Identität wird auf der Startseite
-  bzw. in der Topbar aus den aktiven Nutzerinnen und „Admin" gewählt.
-  → ADR-0002
+  aus den aktiven Nutzerinnen und „Verwaltung" (Admin) gewählt; „Abmelden"
+  in der Topbar führt zurück dorthin (→ UI-3). → ADR-0002, ADR-0018
 - **NUTZ-2** – Als Nutzerin sind nur die eigenen Daten sichtbar und
   änderbar. Als Admin sind alle Nutzerinnen und ihre Dashboards zugänglich.
+- **NUTZ-10** – Admin kann Einträge aller Nutzerinnen anlegen, ändern und
+  löschen, aber nicht für sie stempeln. „Anfang"/„Ende" als Admin wird mit
+  Hinweis abgelehnt, es wird nichts gespeichert. → ADR-0017
 - **NUTZ-3** – Nach 10 min ohne Eingabe (Maus, Tastatur, Scrollen, Touch)
   wechselt die Seite zur Startseite und die Identität wird verworfen. Der
   Server setzt das auch durch, wenn der Browser es nicht tut (z. B. nach
@@ -48,6 +51,6 @@ Verwaltung der Nutzerinnen und Firmeneinstellungen im Admin-Panel.
 
 ## Verweise
 
-- ADRs: 0002, 0013, 0015
+- ADRs: 0002, 0013, 0015, 0017, 0018
 - Tests: `tests/test_auth.py`, `tests/test_idle_timeout.py`,
-  `tests/test_admin.py`, `tests/test_anonymize.py`
+  `tests/test_admin.py`, `tests/test_anonymize.py`, `tests/test_clock.py`

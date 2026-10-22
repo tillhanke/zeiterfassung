@@ -200,6 +200,14 @@ def register_context(app: Flask) -> None:
             "idle_timeout_seconds": app.config["IDLE_TIMEOUT_SECONDS"],
         }
 
+    # Anzeigeformate (UI-1, UI-2): Dauern als h:mm, Daten deutsch.
+    app.add_template_filter(logic.format_hm, "hm")
+    app.add_template_filter(lambda h: logic.format_hm(h, signed=True), "hm_signed")
+    app.add_template_filter(logic.format_number, "zahl")
+    app.add_template_filter(logic.format_date, "datum")
+    app.add_template_filter(logic.format_day, "tag")
+    app.add_template_filter(logic.format_long_date, "langdatum")
+
 
 # ---------------------------------------------------------------------------
 # Zeitfenster-Formularfelder
@@ -341,7 +349,7 @@ def running_total(user: User) -> tuple[float, date]:
 def before_start_error(user: User, d: date) -> Optional[str]:
     if user.start_date is not None and d < user.start_date:
         return (
-            f"Vor dem Startdatum ({user.start_date.isoformat()}) "
+            f"Vor dem Startdatum ({logic.format_date(user.start_date)}) "
             "können keine Einträge gemacht werden."
         )
     return None
@@ -362,7 +370,12 @@ def register_routes(app: Flask) -> None:
         if user:
             return redirect(url_for("user_dashboard", user_id=user.id))
         users = User.query.filter_by(active=True).order_by(User.name).all()
-        return render_template("index.html", users=users)
+        # Wer gerade eingestempelt ist, zeigt die Kachel an (UI-3).
+        running = {
+            wd.user_id: wd.start_time
+            for wd in WorkDay.query.filter_by(date=date.today(), end_time=None)
+        }
+        return render_template("index.html", users=users, running=running)
 
     @app.post("/switch")
     def switch():
@@ -402,6 +415,32 @@ def register_routes(app: Flask) -> None:
                 abort(404)
             return user
         abort(403)
+
+    def _today_summary(user: User, shown: logic.MonthSummary) -> logic.DaySummary:
+        """Tageszusammenfassung für heute, auch wenn ein anderer Monat angezeigt wird."""
+        today = date.today()
+        if (shown.year, shown.month) != (today.year, today.month):
+            workdays = WorkDay.query.filter_by(user_id=user.id, date=today).all()
+            absences = Absence.query.filter_by(user_id=user.id, date=today).all()
+            shown = logic.build_month_summary(
+                user, today.year, today.month, workdays, absences
+            )
+        return next(d for d in shown.days if d.date == today)
+
+    def _clock_block_reason(user: User, today_day: logic.DaySummary) -> Optional[str]:
+        """Warum heute nicht gestempelt werden kann (None = Stempeln möglich)."""
+        if current_identity() == "admin":
+            return (
+                "Stempeln kann nur die Nutzerin selbst. "
+                "Als Admin kannst du Einträge über „Ändern“ korrigieren."
+            )
+        if today_day.kind == "holiday":
+            return f"Heute ist Feiertag ({today_day.note})." if today_day.note else "Heute ist Feiertag."
+        if today_day.kind == "vacation":
+            return "Für heute ist Urlaub eingetragen."
+        if today_day.kind == "sick":
+            return "Für heute ist Krank eingetragen."
+        return before_start_error(user, today_day.date)
 
     @app.route("/user/<int:user_id>")
     def user_dashboard(user_id: int):
@@ -447,9 +486,14 @@ def register_routes(app: Flask) -> None:
         prev_year, prev_month = logic.shift_month(year, month, -1)
         next_year, next_month = logic.shift_month(year, month, +1)
 
+        today_day = _today_summary(user, summary)
+
         return render_template(
             "user_dashboard.html",
             user=user,
+            today_day=today_day,
+            clock_block=_clock_block_reason(user, today_day),
+            is_admin=current_identity() == "admin",
             summary=summary,
             year_summary=year_summary,
             running_total=total,
@@ -500,7 +544,7 @@ def register_routes(app: Flask) -> None:
 
                 replace_windows(user.id, entry_date, windows)
                 db.session.commit()
-                flash(f"Arbeitszeit für {entry_date.isoformat()} gespeichert.", "success")
+                flash(f"Arbeitszeit für {logic.format_date(entry_date)} gespeichert.", "success")
 
             elif kind in (Absence.KIND_VACATION, Absence.KIND_SICK):
                 if entry_date.weekday() >= 5:
@@ -519,7 +563,7 @@ def register_routes(app: Flask) -> None:
                 db.session.commit()
                 label = "Urlaub" if kind == Absence.KIND_VACATION else "Krankheit"
                 flash(
-                    f"{label} für {entry_date.isoformat()} gespeichert.", "success"
+                    f"{label} für {logic.format_date(entry_date)} gespeichert.", "success"
                 )
             else:
                 flash("Unbekannter Eintragstyp.", "danger")
@@ -666,9 +710,22 @@ def register_routes(app: Flask) -> None:
             url_for("user_dashboard", user_id=user.id, year=today.year, month=today.month)
         )
 
+    def _ensure_can_clock(user_id: int) -> tuple[User, Optional[str]]:
+        """Stempeln darf nur die Nutzerin selbst, nicht Admin (NUTZ-10)."""
+        user = _ensure_self(user_id)
+        if current_identity() == "admin":
+            return user, (
+                "Als Admin kann nicht gestempelt werden. "
+                "Einträge bitte über „Ändern“ korrigieren."
+            )
+        return user, None
+
     @app.post("/user/<int:user_id>/clock/start")
     def clock_start(user_id: int):
-        user = _ensure_self(user_id)
+        user, error = _ensure_can_clock(user_id)
+        if error:
+            flash(error, "danger")
+            return _redirect_today(user)
         now = datetime.now()
         today = now.date()
         start_t = logic.round_to_quarter(now)
@@ -690,7 +747,7 @@ def register_routes(app: Flask) -> None:
         ).first()
         if other_open:
             flash(
-                f"Vom {other_open.date.isoformat()} läuft noch ein Zeitfenster – "
+                f"Vom {logic.format_date(other_open.date)} läuft noch ein Zeitfenster – "
                 "bitte dort zuerst über „Ändern“ eine Endzeit setzen.",
                 "danger",
             )
@@ -713,7 +770,10 @@ def register_routes(app: Flask) -> None:
 
     @app.post("/user/<int:user_id>/clock/end")
     def clock_end(user_id: int):
-        user = _ensure_self(user_id)
+        user, error = _ensure_can_clock(user_id)
+        if error:
+            flash(error, "danger")
+            return _redirect_today(user)
         now = datetime.now()
         today = now.date()
         end_t = logic.round_to_quarter(now)
@@ -747,7 +807,7 @@ def register_routes(app: Flask) -> None:
         WorkDay.query.filter_by(user_id=user.id, date=d).delete()
         Absence.query.filter_by(user_id=user.id, date=d).delete()
         db.session.commit()
-        flash(f"Eintrag für {d.isoformat()} entfernt.", "info")
+        flash(f"Eintrag für {logic.format_date(d)} entfernt.", "info")
         return redirect(
             url_for("user_dashboard", user_id=user.id, year=d.year, month=d.month)
         )

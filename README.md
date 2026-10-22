@@ -6,7 +6,8 @@ zeigt Soll, Ist und Saldo (Über-/Minderstunden). Urlaub und Krankentage sind
 eintragbar. Ein Admin-Panel verwaltet Nutzerinnen und ihre Wochenarbeitszeit.
 
 > Hinweis: Authentifizierung ist bewusst nicht implementiert. Die Trennung
-> zwischen Nutzerinnen und Admin erfolgt nur über einen Selektor in der Topbar.
+> zwischen Nutzerinnen und Admin erfolgt nur über die Namensauswahl auf der
+> Startseite (Kacheln, „Verwaltung" für Admin).
 
 ## Features
 
@@ -42,6 +43,9 @@ eintragbar. Ein Admin-Panel verwaltet Nutzerinnen und ihre Wochenarbeitszeit.
 - Admin-Panel: Übersicht aller Nutzerinnen mit aktuellem Monatssaldo,
   Wochenstunden bearbeiten, Nutzerinnen anlegen / deaktivieren / aktivieren.
 - Live-Vorschau der Nettoarbeitszeit beim Eintragen (Vanilla JS).
+- Oberfläche für ein gemeinsames Gerät (PC/Tablet): Namenskacheln auf der
+  Startseite, Karte „Heute" mit großem Stempel-Button, Dauern als `h:mm`
+  (siehe [Spec UI](docs/spec/oberflaeche.md)).
 
 ## Setup
 
@@ -165,6 +169,8 @@ zeiterf/
 ├── docs/
 │   ├── spec/              # verbindliches Verhalten, nummerierte Regeln
 │   └── decisions/         # ADRs: warum etwas so entschieden wurde
+├── static/
+│   └── app.css            # gemeinsame Gestaltung (Farb-Tokens, Kacheln, Tagesliste)
 ├── templates/
 │   ├── base.html
 │   ├── index.html
@@ -183,6 +189,7 @@ zeiterf/
     ├── test_admin.py      # Admin-Panel, User-CRUD
     ├── test_start_date.py # Startdatum und Übertrag
     ├── test_running_total.py # Gesamtsaldo, Nullstellung zum Jahreswechsel
+    ├── test_ui.py         # Anzeigeformate, Startseite, Karte „Heute“, Admin-Ansicht
     └── test_cli.py        # init-db / reset-db
 ```
 

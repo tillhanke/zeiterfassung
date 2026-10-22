@@ -54,3 +54,4 @@ Eine Verhaltensänderung ändert Spec, Code und Tests im selben Commit.
 | SALDO  | [saldo.md](saldo.md) | Soll, Ist, Saldo, Startdatum, Jahreswechsel |
 | FEIER  | [feiertage.md](feiertage.md) | gesetzliche Feiertage |
 | NUTZ   | [nutzerinnen.md](nutzerinnen.md) | Zugang, Timeout, Verwaltung, Firmeneinstellungen |
+| UI     | [oberflaeche.md](oberflaeche.md) | Anzeigeformate, Startseite, Dashboard-Aufbau |

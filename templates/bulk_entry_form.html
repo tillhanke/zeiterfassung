@@ -209,7 +209,11 @@
         const chip = document.createElement('span');
         chip.className = 'date-chip ' + info.cls;
         const labelText = info.label ? ` (${info.label})` : '';
-        chip.innerHTML = `<span>${iso}${labelText}</span>`;
+        const [y, m, d] = iso.split('-');
+        const wd = ['So','Mo','Di','Mi','Do','Fr','Sa'][parseISO(iso).getDay()];
+        const label = document.createElement('span');
+        label.textContent = `${wd} ${d}.${m}.${y}${labelText}`;  // UI-2
+        chip.appendChild(label);
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.setAttribute('aria-label', 'Entfernen');

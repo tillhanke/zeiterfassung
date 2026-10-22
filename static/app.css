@@ -1,0 +1,210 @@
+/* Zeiterfassung – gemeinsame Gestaltung.
+   Ausgelegt für ein gemeinsames Gerät (PC/Tablet): große Schaltflächen,
+   ruhige Farben, Status nie nur über Farbe. */
+
+:root {
+  --zf-bg: #f4f6f9;
+  --zf-surface: #ffffff;
+  --zf-border: #e2e6ec;
+  --zf-text: #1f2937;
+  --zf-muted: #6b7280;
+  --zf-accent: #2563eb;
+
+  --zf-plus: #15803d;
+  --zf-minus: #b91c1c;
+
+  /* Tagesarten: Text / Hintergrund */
+  --zf-work: #1d4ed8;     --zf-work-bg: #eff6ff;
+  --zf-vacation: #a16207; --zf-vacation-bg: #fef9e7;
+  --zf-sick: #6d28d9;     --zf-sick-bg: #f5f3ff;
+  --zf-holiday: #0f766e;  --zf-holiday-bg: #ecfdf8;
+  --zf-missing: #b91c1c;  --zf-missing-bg: #fef2f2;
+  --zf-off: #6b7280;      --zf-off-bg: #f8f9fb;
+  --zf-today-bg: #fffbe6;
+
+  --zf-radius: .75rem;
+  --zf-touch: 3rem; /* Mindesthöhe für Tablet-Bedienung */
+
+  --bs-body-bg: var(--zf-bg);
+  --bs-body-color: var(--zf-text);
+  --bs-border-radius: .5rem;
+}
+
+body {
+  background: var(--zf-bg);
+  color: var(--zf-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.card {
+  border-color: var(--zf-border);
+  border-radius: var(--zf-radius);
+}
+
+.text-plus  { color: var(--zf-plus) !important; }
+.text-minus { color: var(--zf-minus) !important; }
+
+/* ---------- Topbar ---------- */
+
+.zf-topbar {
+  background: var(--zf-surface);
+  border-bottom: 1px solid var(--zf-border);
+}
+.zf-topbar .navbar-brand {
+  font-weight: 600;
+  color: var(--zf-text);
+}
+.zf-who {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  font-weight: 500;
+}
+.zf-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--zf-work-bg);
+  color: var(--zf-work);
+  font-weight: 600;
+  font-size: .9rem;
+}
+
+/* Hinweisleiste, wenn Admin ein fremdes Dashboard ansieht */
+.zf-admin-bar {
+  background: #1f2937;
+  color: #fff;
+  border-radius: var(--zf-radius);
+  padding: .6rem 1rem;
+}
+.zf-admin-bar a { color: #fff; }
+
+/* ---------- Startseite ---------- */
+
+.zf-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 1rem;
+}
+.zf-tile {
+  width: 100%;
+  min-height: 7.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .6rem;
+  background: var(--zf-surface);
+  border: 1px solid var(--zf-border);
+  border-radius: var(--zf-radius);
+  font-size: 1.15rem;
+  font-weight: 500;
+  color: var(--zf-text);
+  transition: border-color .15s, box-shadow .15s, transform .05s;
+}
+.zf-tile:hover, .zf-tile:focus-visible {
+  border-color: var(--zf-accent);
+  box-shadow: 0 0 0 .2rem rgba(37, 99, 235, .15);
+  outline: none;
+}
+.zf-tile:active { transform: scale(.98); }
+.zf-tile .zf-avatar {
+  width: 3rem;
+  height: 3rem;
+  font-size: 1.2rem;
+}
+.zf-tile.is-running .zf-avatar {
+  background: #dcfce7;
+  color: var(--zf-plus);
+}
+.zf-tile-status {
+  font-size: .8rem;
+  font-weight: 400;
+  color: var(--zf-plus);
+}
+
+/* ---------- Dashboard: Heute + Saldo ---------- */
+
+.zf-today-date {
+  font-size: .9rem;
+  color: var(--zf-muted);
+}
+.zf-today-state {
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+.zf-timer {
+  font-size: 2.25rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.btn-clock {
+  min-height: 4.5rem;
+  min-width: 12rem;
+  font-size: 1.35rem;
+  font-weight: 600;
+  border-radius: var(--zf-radius);
+}
+.zf-balance {
+  font-size: 2.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.zf-stat-label {
+  font-size: .8rem;
+  color: var(--zf-muted);
+}
+.zf-stat-value {
+  font-weight: 600;
+}
+
+/* ---------- Monatsliste ---------- */
+
+.zf-month-nav .btn {
+  min-height: var(--zf-touch);
+  display: inline-flex;
+  align-items: center;
+}
+
+.zf-days td, .zf-days th { padding: .55rem .75rem; }
+.zf-days .btn { min-height: 2.25rem; }
+
+.day-row td:first-child { white-space: nowrap; font-weight: 500; }
+.day-row.weekend,
+.day-row.future,
+.day-row.inactive { color: var(--zf-off); }
+.day-row.weekend td,
+.day-row.inactive td { background: var(--zf-off-bg); }
+.day-row.empty td:first-child { color: var(--zf-missing); }
+.day-row.today td { background: var(--zf-today-bg); }
+.day-row.today td:first-child { box-shadow: inset 4px 0 0 var(--zf-accent); }
+
+/* Tagesart als Pille: Farbe + Text */
+.zf-kind {
+  display: inline-block;
+  padding: .15rem .55rem;
+  border-radius: 999px;
+  font-size: .8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.zf-kind.work     { color: var(--zf-work);     background: var(--zf-work-bg); }
+.zf-kind.vacation { color: var(--zf-vacation); background: var(--zf-vacation-bg); }
+.zf-kind.sick     { color: var(--zf-sick);     background: var(--zf-sick-bg); }
+.zf-kind.holiday  { color: var(--zf-holiday);  background: var(--zf-holiday-bg); }
+.zf-kind.empty    { color: var(--zf-missing);  background: var(--zf-missing-bg); }
+.zf-kind.off      { color: var(--zf-off);      background: transparent; font-weight: 400; }
+
+details.zf-details > summary {
+  cursor: pointer;
+  font-weight: 500;
+  list-style-position: inside;
+}
+
+.zf-help {
+  color: var(--zf-muted);
+  font-size: .875rem;
+}

@@ -1,44 +1,37 @@
 {% extends "base.html" %}
 {% block title %}Willkommen – Zeiterfassung{% endblock %}
 {% block content %}
-<div class="row">
-  <div class="col-lg-8 mx-auto">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <h1 class="h3 mb-3">Willkommen</h1>
-        <p class="text-muted">
-          Wähle oben rechts deine Identität aus, um zu starten. Die Trennung
-          zwischen Nutzerinnen und Admin erfolgt aktuell rein über die Auswahl
-          (keine Authentifizierung).
-        </p>
+<div class="text-center mb-4">
+  <h1 class="h3 mb-1">Willkommen</h1>
+  <p class="text-muted mb-0">{{ today|langdatum }} · Bitte tippe auf deinen Namen.</p>
+</div>
 
-        <h2 class="h5 mt-4">Schnellauswahl</h2>
-        {% if users %}
-          <div class="d-flex flex-wrap gap-2 mt-2">
-            {% for u in users %}
-              <form method="post" action="{{ url_for('switch') }}">
-                <input type="hidden" name="identity" value="user:{{ u.id }}" />
-                <button class="btn btn-outline-primary" type="submit">
-                  {{ u.name }}
-                  <span class="badge bg-secondary ms-2">{{ u.weekly_hours }} h/Woche</span>
-                </button>
-              </form>
-            {% endfor %}
-          </div>
-        {% else %}
-          <p class="text-muted">
-            Noch keine Nutzerinnen angelegt. Wechsle zuerst in das Admin-Panel.
-          </p>
-        {% endif %}
-
-        <hr class="my-4" />
-
-        <form method="post" action="{{ url_for('switch') }}">
-          <input type="hidden" name="identity" value="admin" />
-          <button class="btn btn-dark" type="submit">Als Admin anmelden</button>
-        </form>
-      </div>
-    </div>
+{% if users %}
+  <div class="zf-tiles">
+    {% for u in users %}
+      {% set running_since = running.get(u.id) %}
+      <form method="post" action="{{ url_for('switch') }}">
+        <input type="hidden" name="identity" value="user:{{ u.id }}" />
+        <button class="zf-tile{% if running_since %} is-running{% endif %}" type="submit">
+          <span class="zf-avatar" aria-hidden="true">{{ u.name[:1] }}</span>
+          <span>{{ u.name }}</span>
+          {% if running_since %}
+            <span class="zf-tile-status">● eingestempelt seit {{ running_since.strftime('%H:%M') }}</span>
+          {% endif %}
+        </button>
+      </form>
+    {% endfor %}
   </div>
+{% else %}
+  <div class="card card-body text-center text-muted">
+    Noch keine Nutzerinnen angelegt. Lege sie über die Verwaltung an.
+  </div>
+{% endif %}
+
+<div class="text-center mt-5">
+  <form method="post" action="{{ url_for('switch') }}" class="d-inline">
+    <input type="hidden" name="identity" value="admin" />
+    <button class="btn btn-link text-muted" type="submit">Verwaltung</button>
+  </form>
 </div>
 {% endblock %}
