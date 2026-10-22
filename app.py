@@ -1,7 +1,7 @@
 """Flask-Anwendung für die Zeiterfassung.
 
 Startbefehle:
-    flask --app app init-db    # legt die Tabellen an
+    flask --app app init-db    # legt die Tabellen an bzw. migriert sie
     flask --app app reset-db   # leert die Datenbank (alle Nutzerinnen + Einträge)
     flask --app app run --debug
 """
@@ -16,7 +16,7 @@ from functools import wraps
 from typing import Optional
 
 import click
-from sqlalchemy import text
+from flask_migrate import Migrate, stamp, upgrade
 from flask import (
     Flask,
     abort,
@@ -31,6 +31,9 @@ from flask import (
 
 import logic
 from models import Absence, Setting, User, WorkDay, db
+
+
+MIGRATIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "migrations")
 
 
 def create_app(test_config: Optional[dict] = None) -> Flask:
@@ -59,6 +62,9 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
         app.config.update(test_config)
 
     db.init_app(app)
+    # render_as_batch: SQLite kann Spalten/Constraints nur per Tabellen-Neuaufbau
+    # ändern, Alembic erledigt das im Batch-Mode.
+    Migrate(app, db, directory=MIGRATIONS_DIR, render_as_batch=True)
 
     register_idle_timeout(app)
     register_routes(app)
@@ -911,70 +917,6 @@ def anonymize_user_names(prefix: str = "Nutzerin") -> int:
 
 
 # ---------------------------------------------------------------------------
-# Schema-Migration
-# ---------------------------------------------------------------------------
-
-
-def migrate_workdays_schema() -> bool:
-    """Bringt eine ältere `workdays`-Tabelle auf das aktuelle Schema.
-
-    - UNIQUE(user_id, date) entfällt (mehrere Zeitfenster pro Tag)
-    - end_time wird nullable (laufendes Zeitfenster per "Anfang")
-
-    SQLite kann Constraints nicht per ALTER TABLE ändern, daher wird die
-    Tabelle neu aufgebaut und die Daten werden übernommen. Idempotent; gibt
-    True zurück, wenn migriert wurde.
-    """
-    ddl = db.session.execute(
-        text("SELECT sql FROM sqlite_master WHERE type='table' AND name='workdays'")
-    ).scalar()
-    if not ddl:
-        return False
-    normalized = " ".join(ddl.split())
-    if (
-        "uq_workday_user_date" not in normalized
-        and "end_time TIME NOT NULL" not in normalized
-    ):
-        return False
-    db.session.close()
-    # Eine Transaktion: schlägt ein Schritt fehl, bleibt die alte Tabelle intakt.
-    with db.engine.begin() as conn:
-        conn.execute(text("ALTER TABLE workdays RENAME TO workdays_old"))
-        # Indizes wandern beim RENAME mit und würden den Neuaufbau blockieren.
-        conn.execute(text("DROP INDEX IF EXISTS ix_workdays_user_date"))
-        WorkDay.__table__.create(conn)
-        conn.execute(
-            text(
-                "INSERT INTO workdays (id, user_id, date, start_time, end_time) "
-                "SELECT id, user_id, date, start_time, end_time FROM workdays_old"
-            )
-        )
-        conn.execute(text("DROP TABLE workdays_old"))
-    return True
-
-
-def migrate_users_schema() -> bool:
-    """Ergänzt in einer älteren `users`-Tabelle die Spalten für Startdatum und
-    Übertrag. Idempotent; gibt True zurück, wenn migriert wurde."""
-    columns = {
-        row[1] for row in db.session.execute(text("PRAGMA table_info(users)"))
-    }
-    if not columns:
-        return False
-    added = False
-    if "start_date" not in columns:
-        db.session.execute(text("ALTER TABLE users ADD COLUMN start_date DATE"))
-        added = True
-    if "start_balance" not in columns:
-        db.session.execute(
-            text("ALTER TABLE users ADD COLUMN start_balance FLOAT NOT NULL DEFAULT 0")
-        )
-        added = True
-    db.session.commit()
-    return added
-
-
-# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -982,13 +924,10 @@ def migrate_users_schema() -> bool:
 def register_cli(app: Flask) -> None:
     @app.cli.command("init-db")
     def init_db_cmd():
-        """Legt die Datenbank-Tabellen an (ohne Daten anzulegen)."""
+        """Legt die Datenbank an bzw. bringt sie per Alembic auf den neuesten
+        Schemastand (ohne Daten anzulegen). Idempotent."""
         with app.app_context():
-            if migrate_workdays_schema():
-                print("Tabelle workdays auf aktuelles Schema migriert.")
-            if migrate_users_schema():
-                print("Tabelle users um Startdatum/Übertrag ergänzt.")
-            db.create_all()
+            upgrade()
             print("Datenbank initialisiert.")
 
     @app.cli.command("reset-db")
@@ -997,6 +936,9 @@ def register_cli(app: Flask) -> None:
         with app.app_context():
             db.drop_all()
             db.create_all()
+            # Frisch angelegt = neuester Stand; sonst würde ein späteres
+            # Upgrade bereits vorhandene Tabellen erneut anlegen wollen.
+            stamp()
             print("Datenbank zurückgesetzt (alle Nutzerinnen + Einträge entfernt).")
 
     @app.cli.command("anonymize-names")

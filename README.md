@@ -49,13 +49,13 @@ eintragbar. Ein Admin-Panel verwaltet Nutzerinnen und ihre Wochenarbeitszeit.
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Runtime-Abhängigkeiten (Flask, Flask-SQLAlchemy, gunicorn):
+# Runtime-Abhängigkeiten (Flask, Flask-SQLAlchemy, Flask-Migrate, gunicorn):
 pip install -r requirements.txt
 
 # Dev-Abhängigkeiten (zusätzlich pytest):
 pip install -r requirements-dev.txt
 
-# Datenbank-Tabellen anlegen:
+# Datenbank anlegen bzw. auf den neuesten Schemastand migrieren:
 flask --app app init-db
 
 # Entwicklungsserver starten:
@@ -75,6 +75,25 @@ pytest
 ```
 
 Die App ist anschließend unter <http://127.0.0.1:5000> erreichbar.
+
+### Schemaänderungen
+
+Das Datenbankschema wird mit Alembic (Flask-Migrate) versioniert, die
+Migrationsskripte liegen in `migrations/versions/` (siehe ADR-0012).
+`init-db` wendet alle ausstehenden Migrationen an; Datenbanken aus der Zeit
+vor Alembic werden dabei einmalig übernommen, die Daten bleiben erhalten.
+
+Nach einer Änderung an `models.py`:
+
+```bash
+flask --app app db migrate -m "Kurze Beschreibung"   # Skript erzeugen
+# erzeugtes Skript prüfen und ggf. anpassen, dann:
+flask --app app init-db                              # bzw. flask --app app db upgrade
+```
+
+SQLite kann Spalten und Constraints nur durch Neuaufbau der Tabelle ändern;
+die Skripte werden deshalb im Batch-Mode erzeugt. Ein Test in
+`tests/test_cli.py` schlägt fehl, wenn Modelle und Migrationen auseinanderlaufen.
 
 ### Konfiguration
 
@@ -98,7 +117,8 @@ SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')" \
   ./run.sh    # startet den Container, Port 8000, instance/ als Volume
 ```
 
-Der Container ruft beim Start automatisch `flask init-db` auf (idempotent).
+Der Container ruft beim Start automatisch `flask init-db` auf (idempotent,
+wendet ausstehende Migrationen an).
 Die SQLite-Datei landet im gemounteten `./instance`-Verzeichnis auf dem Host.
 Ein `HEALTHCHECK` prüft alle 30 s, ob die Index-Route 200 liefert.
 
@@ -118,7 +138,7 @@ Das Script
 2. erstellt `.venv/` mit allen Runtime-Abhängigkeiten,
 3. generiert beim Erst-Lauf `/etc/zeiterfassung.env` mit einem zufälligen
    `SECRET_KEY` (`chmod 0640`, owner `root:zeiterfassung`),
-4. initialisiert die Datenbank,
+4. initialisiert bzw. migriert die Datenbank,
 5. aktiviert und startet `zeiterfassung.service`.
 
 Das Service-Profil ist gehärtet (`NoNewPrivileges`, `ProtectSystem=strict`,
@@ -150,6 +170,7 @@ zeiterf/
 ├── app.py                 # Flask-App, Routen, Session-Handling, CLI
 ├── models.py              # SQLAlchemy: User, WorkDay, Absence
 ├── logic.py               # Pausenabzug, Soll/Ist-Berechnung
+├── migrations/            # Alembic: env.py, versions/ mit Migrationsskripten
 ├── requirements.txt       # Runtime-Abhängigkeiten
 ├── requirements-dev.txt   # zusätzlich pytest
 ├── pytest.ini
@@ -183,7 +204,7 @@ zeiterf/
     ├── test_admin.py      # Admin-Panel, User-CRUD
     ├── test_start_date.py # Startdatum und Übertrag
     ├── test_running_total.py # Gesamtsaldo, Nullstellung zum Jahreswechsel
-    └── test_cli.py        # init-db / reset-db
+    └── test_cli.py        # init-db / reset-db, Migrationen
 ```
 
 ## Tests

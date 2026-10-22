@@ -5,12 +5,11 @@ Erledigte Punkte werden entfernt; das Ergebnis steht dann in Spec und ADRs.
 
 ## Beschlossen
 
-Reihenfolge = empfohlene Umsetzungsreihenfolge. B-1 zuerst, weil B-5, B-6
-und B-7 Schemaänderungen brauchen.
+Reihenfolge = empfohlene Umsetzungsreihenfolge. Schemaänderungen (B-5, B-6,
+B-7) laufen über Alembic-Migrationen (ADR-0012).
 
 | ID | Thema | Entscheidung | Spec |
 | -- | ----- | ------------ | ---- |
-| B-1 | Alembic einführen, bestehende `init-db`-Migrationen ablösen | ADR-0012 | – |
 | B-2 | Pausenabzug nach Tagessumme mit Anrechnung von Lücken ≥ 15 min (auch Live-Vorschau) | ADR-0003 | PAUSE-1, PAUSE-2 |
 | B-3 | Feiertage wie Wochenende: Arbeit/Stempeln erlauben, Urlaub/Krank ablehnen bzw. überspringen | ADR-0005 | ERF-6, ERF-7, ERF-12 |
 | B-4 | Saldo nur bis heute; offenes Fenster live mitzählen | ADR-0006 | SALDO-6, SALDO-7 |

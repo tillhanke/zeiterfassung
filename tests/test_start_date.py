@@ -239,12 +239,11 @@ class TestMigrateUsers:
 
         result = runner.invoke(args=["init-db"])
         assert result.exit_code == 0
-        assert "Startdatum/Übertrag" in result.output
 
         with app.app_context():
             u = db.session.get(User, 1)
             assert (u.name, u.start_date, u.start_balance) == ("Alt", None, 0.0)
 
-        # Zweiter Lauf migriert nichts mehr.
+        # Zweiter Lauf ist ein No-op.
         result = runner.invoke(args=["init-db"])
-        assert "Startdatum/Übertrag" not in result.output
+        assert result.exit_code == 0

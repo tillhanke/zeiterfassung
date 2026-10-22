@@ -12,6 +12,7 @@ Bewusst ohne echte Authentifizierung.
 - `app.py` – Routen, Session-Handling, CLI-Befehle
 - `logic.py` – Geschäftslogik (Pausen, Feiertage, Soll/Ist/Saldo); möglichst frei von Flask
 - `models.py` – SQLAlchemy-Modelle
+- `migrations/` – Alembic-Migrationen (Flask-Migrate); jede Modelländerung braucht ein Skript
 - `templates/` – Jinja-Templates, Vanilla JS
 - `tests/` – pytest, ein Modul pro Feature-Bereich
 
@@ -21,7 +22,8 @@ Bewusst ohne echte Authentifizierung.
 source .venv/bin/activate
 pytest                          # komplette Suite, < 2 s
 flask --app app run --debug     # Dev-Server
-flask --app app init-db         # Tabellen anlegen (idempotent)
+flask --app app init-db         # Tabellen anlegen/migrieren (idempotent)
+flask --app app db migrate -m … # Migrationsskript nach Modelländerung erzeugen
 ```
 
 ## Arbeitsregeln
