@@ -43,10 +43,15 @@ Tablet, kioskartig).
   In der Tagesliste wird nicht gestempelt.
 - **UI-5** – Sieht Admin das Dashboard einer Nutzerin, steht darüber eine
   Hinweisleiste mit ihrem Namen und einem Link zurück zur Übersicht.
-- **UI-6** – Das Admin-Panel ist von oben nach unten nach Häufigkeit
-  geordnet: „Braucht Aufmerksamkeit" (NUTZ-11), Nutzerinnen, „Neue Nutzerin
-  anlegen". Einstellungen und die Detailseite je Nutzerin sind eigene
-  Seiten mit Link zurück zur Übersicht.
+- **UI-6** – Die Übersicht des Admin-Panels zeigt oben „Neue Nutzerin
+  anlegen" (der einzige Weg zum Anlegen), darunter die Nutzerinnen mit
+  Summen (NUTZ-12). Einstellungen und die Detailseite je Nutzerin sind
+  eigene Seiten mit Link zurück zur Übersicht.
+- **UI-7** – Hat eine Nutzerin ein offenes Zeitfenster von einem früheren
+  Tag, zeigt ihr Dashboard oben einen Hinweis mit Datum, Anfangszeit und
+  „Jetzt nachtragen" (öffnet diesen Tag im Eintragsformular). Die Karte
+  „Heute" nennt dann statt „Anfang" den Grund, warum nicht gestempelt
+  werden kann (ERF-12).
 
 ## Nicht im Umfang
 

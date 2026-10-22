@@ -482,12 +482,30 @@ def register_routes(app: Flask) -> None:
         next_year, next_month = logic.shift_month(year, month, +1)
 
         today_day = _today_summary(user, summary)
+        # Offenes Zeitfenster von einem früheren Tag: blockiert das Stempeln
+        # (ERF-12), deshalb oben als Hinweis zum Nachtragen (UI-7).
+        stale_open = (
+            WorkDay.query.filter(
+                WorkDay.user_id == user.id,
+                WorkDay.date < date.today(),
+                WorkDay.end_time.is_(None),
+            )
+            .order_by(WorkDay.date)
+            .first()
+        )
+        clock_block = _clock_block_reason(user, today_day)
+        if stale_open and not clock_block:
+            clock_block = (
+                f"Erst die fehlende Endzeit vom {logic.format_day(stale_open.date)} "
+                "nachtragen, dann ist Einstempeln wieder möglich."
+            )
 
         return render_template(
             "user_dashboard.html",
             user=user,
             today_day=today_day,
-            clock_block=_clock_block_reason(user, today_day),
+            stale_open=stale_open,
+            clock_block=clock_block,
             is_admin=current_identity() == "admin",
             summary=summary,
             year_summary=year_summary,
@@ -809,18 +827,6 @@ def register_routes(app: Flask) -> None:
         ).all()
         return logic.build_month_summary(user, year, month, workdays, absences)
 
-    def _missing_days(user: User, today: date, days: int = 30) -> list[date]:
-        """Leere Werktage der letzten `days` Tage vor heute (ohne heute)."""
-        since = today - timedelta(days=days)
-        found: list[date] = []
-        for year, month in {(since.year, since.month), (today.year, today.month)}:
-            found += [
-                d.date
-                for d in _month_summary(user, year, month).days
-                if d.kind == "empty" and since <= d.date < today
-            ]
-        return sorted(found)
-
     @app.route("/admin")
     @require_identity("admin")
     def admin():
@@ -835,31 +841,14 @@ def register_routes(app: Flask) -> None:
                 "total": total,
                 "since": since,
             })
-        active = [u for u in users if u.active]
-        # „Braucht Aufmerksamkeit“ (NUTZ-11)
-        running_now = (
-            WorkDay.query.filter_by(date=today, end_time=None)
-            .join(User).filter(User.active.is_(True))
-            .order_by(WorkDay.start_time).all()
-        )
-        stale_open = (
-            WorkDay.query.filter(WorkDay.date < today, WorkDay.end_time.is_(None))
-            .join(User).filter(User.active.is_(True))
-            .order_by(WorkDay.date).all()
-        )
-        missing = [
-            {"user": u, "dates": days}
-            for u in active
-            if (days := _missing_days(u, today))
-        ]
+        active_rows = [r for r in rows if r["user"].active]
         return render_template(
             "admin.html",
-            rows=[r for r in rows if r["user"].active],
+            rows=active_rows,
             inactive_rows=[r for r in rows if not r["user"].active],
-            running_now=running_now,
-            stale_open=stale_open,
-            missing=missing,
-            active_count=len(active),
+            # Summe der Salden aller aktiven Nutzerinnen (NUTZ-12)
+            team_total=sum(r["total"] for r in active_rows),
+            team_month=sum(r["summary"].saldo for r in active_rows),
             year=today.year,
             month=today.month,
         )

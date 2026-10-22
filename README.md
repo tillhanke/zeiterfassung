@@ -41,10 +41,10 @@ eintragbar. Ein Admin-Panel verwaltet Nutzerinnen und ihre Wochenarbeitszeit.
   Neujahr, Heilige Drei Könige, Karfreitag, Ostermontag, Tag der Arbeit,
   Christi Himmelfahrt, Pfingstmontag, Tag der Deutschen Einheit,
   Reformationstag und beide Weihnachtsfeiertage.
-- Admin-Panel: Übersicht mit „Braucht Aufmerksamkeit" (wer ist eingestempelt,
-  offene Stempelungen, fehlende Tage), Nutzerinnen mit Monats- und
-  Gesamtsaldo, Nutzerin anlegen; Detailseite je Nutzerin (Stammdaten in einem
+- Admin-Panel: Nutzerin anlegen, Nutzerinnen mit Monats- und Gesamtsaldo
+  sowie Summe über alle; Detailseite je Nutzerin (Stammdaten in einem
   Formular, deaktivieren/aktivieren); Einstellungen auf eigener Seite.
+- Hinweis im Dashboard, wenn an einem früheren Tag nicht ausgestempelt wurde.
 - Live-Vorschau der Nettoarbeitszeit beim Eintragen (Vanilla JS).
 - Oberfläche für ein gemeinsames Gerät (PC/Tablet): Namenskacheln auf der
   Startseite, Karte „Heute" mit großem Stempel-Button, Dauern als `h:mm`

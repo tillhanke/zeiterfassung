@@ -66,12 +66,13 @@ class TestStartPage:
         assert ">Abmelden</button>" in html
 
     def test_admin_overview_layout(self, client, login_admin):
-        """UI-6: Übersicht mit Nutzerinnen und „Neue Nutzerin anlegen“;
-        Einstellungen auf eigener Seite, oben verlinkt."""
+        """UI-6: „Neue Nutzerin anlegen“ oben, dann Nutzerinnen; ein Weg zum
+        Anlegen; Einstellungen auf eigener Seite, oben verlinkt."""
         html = client.get("/admin").data.decode()
         assert 'href="/admin/settings"' in html
         assert 'id="yearly_reset"' not in html
-        assert html.index(">Nutzerinnen</h2>") < html.index(">Neue Nutzerin anlegen</h2>")
+        assert html.index(">Neue Nutzerin anlegen</h2>") < html.index(">Nutzerinnen</h2>")
+        assert "+ Nutzerin anlegen" not in html
 
     def test_no_identity_dropdown_in_topbar(self, client, login_alice):
         """UI-3: Topbar zeigt die Identität und „Abmelden“, keine Auswahl."""
@@ -109,6 +110,26 @@ class TestTodayCard:
         assert b"Aktueller Gesamtsaldo" in r.data
         assert b" h/Woche" in r.data
         assert "40 h/Woche · Soll/Tag 8:00 h".encode() in r.data
+
+
+class TestStaleOpenWindow:
+    def test_warning_with_link(self, client, login_alice, make_workday, freeze_now):
+        """UI-7: offenes Zeitfenster eines früheren Tages wird gemeldet."""
+        make_workday(login_alice, date(2026, 5, 8), time(9, 0), None)
+        freeze_now(datetime(2026, 5, 11, 8, 0))
+        html = client.get(f"/user/{login_alice}").data.decode()
+        assert "Am Fr 08.05. wurde nicht ausgestempelt" in html
+        assert f'href="/user/{login_alice}/entry?date=2026-05-08">Jetzt nachtragen' in html
+        # Statt „Anfang“, das nur fehlschlagen würde, steht der Grund in „Heute“.
+        assert ">Anfang</button>" not in html
+        assert "Erst die fehlende Endzeit vom Fr 08.05. nachtragen" in html
+
+    def test_no_warning_for_todays_open_window(self, client, login_alice, make_workday, freeze_now):
+        make_workday(login_alice, date(2026, 5, 11), time(8, 0), None)
+        freeze_now(datetime(2026, 5, 11, 9, 0))
+        html = client.get(f"/user/{login_alice}").data.decode()
+        assert "wurde nicht ausgestempelt" not in html
+        assert ">Ende</button>" in html
 
 
 class TestAdminView:

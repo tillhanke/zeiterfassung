@@ -47,10 +47,14 @@ Verwaltung der Nutzerinnen und Firmeneinstellungen im Admin-Panel.
 - **NUTZ-8** – Firmeneinstellungen stehen auf einer eigenen Seite:
   Nullstellung zum Jahreswechsel (SALDO-11), Rundung beim Stempeln
   (ERF-15), Bundesland (FEIER-1).
-- **NUTZ-11** – Die Übersicht zeigt oben, was Aufmerksamkeit braucht (nur
-  aktive Nutzerinnen): wer gerade eingestempelt ist, offene Zeitfenster von
-  früheren Tagen (mit Link zum Korrigieren) und leere Werktage der letzten
-  30 Tage vor heute, ab dem Startdatum (mit Link zum Monat).
+- ~~**NUTZ-11**~~ – entfallen: „Braucht Aufmerksamkeit" (eingestempelt,
+  offene Stempelungen, fehlende Tage). Ohne festgelegte Arbeitstage je
+  Nutzerin sind „fehlende Tage" irreführend; offene Stempelungen meldet
+  das Dashboard der Nutzerin selbst (UI-7).
+- **NUTZ-12** – Die Übersicht zeigt die Summe der Gesamtsalden und die Summe
+  der Monatssalden aller aktiven Nutzerinnen (Stand heute), oben in der
+  Nutzerinnen-Karte und als Summenzeile der Tabelle. Deaktivierte zählen
+  nicht mit.
 
 ### Wartung
 

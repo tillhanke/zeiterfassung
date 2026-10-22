@@ -292,12 +292,8 @@ details.zf-details > summary {
 
 /* ---------- Verwaltung ---------- */
 
-.zf-attention-count {
+.zf-team-total {
   font-size: 2rem;
   font-weight: 700;
   line-height: 1.2;
-}
-.card.zf-attention {
-  border-color: #fca5a5;
-  box-shadow: inset 4px 0 0 var(--zf-missing);
 }

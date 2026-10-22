@@ -175,35 +175,31 @@ class TestUserDetail:
 
 
 class TestOverview:
-    """Übersicht mit „Braucht Aufmerksamkeit“ (NUTZ-11)."""
+    """Übersicht des Admin-Panels (NUTZ-7, NUTZ-12)."""
 
-    def test_running_now(self, client, login_admin, alice_id, bob_id, make_workday):
-        make_workday(alice_id, date.today(), time(8, 15), None)
-        html = client.get("/admin").data.decode()
-        assert "Alice <span class=\"text-muted\">seit 08:15</span>" in html
-        assert "von 2" in html
-
-    def test_stale_open_window_listed(self, client, login_admin, alice_id, make_workday):
-        d = date.today() - timedelta(days=3)
-        make_workday(alice_id, d, time(8, 0), None)
-        html = client.get("/admin").data.decode()
-        assert "Offene Stempelungen" in html
-        assert f'/user/{alice_id}/entry?date={d.isoformat()}' in html
-
-    def test_missing_days_counted(self, client, login_admin, app, alice_id):
-        """Leere Werktage der letzten 30 Tage, ab Startdatum, ohne heute."""
-        today = date.today()
-        start = today - timedelta(days=14)
+    def _total(self, app, user_id):
+        from app import running_total
         with app.app_context():
-            u = db.session.get(User, alice_id)
-            u.start_date = start
-            db.session.commit()
-            expected = [
-                d for d in (start + timedelta(days=i) for i in range(14))
-                if d.weekday() < 5 and not logic.is_holiday(d)
-            ]
+            return running_total(db.session.get(User, user_id))[0]
+
+    def test_team_total_sums_active_users(self, client, login_admin, app, alice_id, bob_id,
+                                          inactive_user_id, make_workday):
+        """NUTZ-12: Summe der Gesamtsalden aller aktiven Nutzerinnen."""
+        make_workday(alice_id, date.today() - timedelta(days=1), time(8, 0), time(18, 0))
+        make_workday(inactive_user_id, date.today() - timedelta(days=1), time(8, 0), time(20, 0))
+        expected = self._total(app, alice_id) + self._total(app, bob_id)
         text = " ".join(client.get("/admin").data.decode().split())
-        assert f"Alice · {len(expected)} Tage, zuletzt {logic.format_day(expected[-1])}" in text
+        assert f'Summe Gesamtsaldo</div> <div class="zf-team-total' in text
+        assert f"{logic.format_hm(expected, signed=True)} h" in text
+        assert "<td>Summe</td>" in text
+
+    def test_no_attention_cards(self, client, login_admin, alice_id, make_workday):
+        """NUTZ-11 entfallen: keine Karten zu Stempelungen oder fehlenden Tagen."""
+        make_workday(alice_id, date.today() - timedelta(days=3), time(8, 0), None)
+        html = client.get("/admin").data.decode()
+        assert "Jetzt eingestempelt" not in html
+        assert "Offene Stempelungen" not in html
+        assert "Fehlende Tage" not in html
 
     def test_inactive_users_collapsed(self, client, login_admin, alice_id, inactive_user_id):
         html = client.get("/admin").data.decode()
